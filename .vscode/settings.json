@@ -1,0 +1,26 @@
+// Place your settings in this file to overwrite default and user settings.
+{
+	"files.exclude": {
+		"out": false // set this to true to hide the "out" folder with the compiled JS files
+	},
+	"search.exclude": {
+		"out": true // set this to false to include "out" folder in search results
+	},
+	// Turn off tsc task auto detection since we have the necessary tasks as npm scripts
+	"typescript.tsc.autoDetect": "off",
+	"aiTutor.provider": "copilot",
+	"aiTutor.visionMode": "ocr",
+	"aiTutor.openai.protocol": "anthropic",
+	"aiTutor.openai.endpoint": "https://api.anthropic.com/v1/messages",
+	"aiTutor.openai.responseTextPath": "content.0.text",
+	"aiTutor.openai.visionResponseTextPath": "content.0.text",
+	"aiTutor.openai.anthropicVersion": "2023-06-01",
+	"aiTutor.openai.model": "claude-3-5-haiku-latest",
+	"aiTutor.openai.visionModel": "claude-3-5-haiku-latest",
+	"aiTutor.openai.anthropicMaxTokens": 700,
+	"aiTutor.fastMode": true,
+	"aiTutor.maxContextTurns": 2,
+	"aiTutor.maxSelectionChars": 650,
+	"aiTutor.responseStyle": "plainText",
+	"aiTutor.openai.apiKey": "sk-cp--YCfvh2E-NAkEsCeOp-77SAG0SzAdGMKsW4o-6qnUURmUFvZxUiPStVyceocs1goPJ-UXpJElPmZ-flJmLL_sjP38wtIyTl4fonht1pbmamqFUdgNe4iMCE"
+}
