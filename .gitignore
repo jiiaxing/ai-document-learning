@@ -1,5 +1,42 @@
-out
-dist
-node_modules
-.vscode-test/
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+release/
 *.vsix
+*.asar
+
+# Local app config and secrets
+ai-tutor.config.json
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs and temporary runtime files
+logs/
+*.log
+server-runtime*.log
+tmp-*.log
+
+# Local/private PDF files and smoke-test captures
+*.pdf
+video-frames/
+screenshots/
+test-results/
+playwright-report/
+coverage/
+.nyc_output/
+
+# Editor and tool caches
+.vscode-test/
+.codex-backups/
+.idea/
+.cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

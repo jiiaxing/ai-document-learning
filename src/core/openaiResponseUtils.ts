@@ -6,6 +6,10 @@ export function resolveResponseTextPath(protocol: 'openai' | 'anthropic', path: 
         }
     }
 
+    if (protocol === 'openai' && trimmed === 'content.0.text') {
+        return 'choices.0.message.content';
+    }
+
     if (!trimmed) {
         return 'choices.0.message.content';
     }

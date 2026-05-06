@@ -1,356 +1,58 @@
 {
-  "name": "pdf-reader",
-  "displayName": "AI 课件助教",
-  "description": "翻译并讲解艰深的计算机专业内容",
-  "version": "0.0.1",
-  "engines": {
-    "vscode": "^1.108.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "main": "./out/extension.js",
-  "activationEvents": [],
-  "contributes": {
-    "configuration": {
-      "title": "AI Tutor",
-      "properties": {
-        "aiTutor.provider": {
-          "type": "string",
-          "enum": [
-            "copilot",
-            "openaiCompatible"
-          ],
-          "default": "copilot",
-          "description": "AI 提供方。copilot 使用 VS Code 已登录模型；openaiCompatible 使用 OpenAI 兼容接口。"
-        },
-        "aiTutor.autoExplainOnSelection": {
-          "type": "boolean",
-          "default": true,
-          "description": "选中文本后自动触发解释。"
-        },
-        "aiTutor.selectionDebounceMs": {
-          "type": "number",
-          "default": 1200,
-          "minimum": 0,
-          "description": "自动解释防抖时间（毫秒）。"
-        },
-        "aiTutor.mouseReleaseDelayMs": {
-          "type": "number",
-          "default": 180,
-          "minimum": 0,
-          "description": "仅鼠标选中时生效：在检测到鼠标左键释放后的触发延迟（毫秒）。"
-        },
-        "aiTutor.minSelectionLength": {
-          "type": "number",
-          "default": 1,
-          "minimum": 1,
-          "description": "触发自动解释所需的最小选中文本长度。"
-        },
-        "aiTutor.maxContextTurns": {
-          "type": "number",
-          "default": 3,
-          "minimum": 1,
-          "maximum": 20,
-          "description": "发送给模型的最大上下文轮数。"
-        },
-        "aiTutor.fastMode": {
-          "type": "boolean",
-          "default": true,
-          "description": "速度优先模式：自动精简提示词与上下文以加快响应。"
-        },
-        "aiTutor.maxSelectionChars": {
-          "type": "number",
-          "default": 900,
-          "minimum": 100,
-          "description": "发送给模型的选中文本最大长度，超出会自动截断以提升速度。"
-        },
-        "aiTutor.autoExplainCooldownMs": {
-          "type": "number",
-          "default": 3000,
-          "minimum": 0,
-          "description": "自动触发讲解的最小间隔（毫秒），避免频繁请求导致变慢或失败。"
-        },
-        "aiTutor.privacyMode": {
-          "type": "string",
-          "enum": [
-            "allow",
-            "confirm",
-            "deny"
-          ],
-          "default": "allow",
-          "description": "课件文本外发策略：allow=允许，confirm=每次确认，deny=禁止。"
-        },
-        "aiTutor.useClipboardFallback": {
-          "type": "boolean",
-          "default": true,
-          "description": "当无法从编辑器读取选中内容（如 PDF 预览）时，允许回退到剪贴板文本。"
-        },
-        "aiTutor.autoExplainOnClipboardChange": {
-          "type": "boolean",
-          "default": true,
-          "description": "监听剪贴板变化并自动解释（适用于 PDF 复制后自动讲解）。"
-        },
-        "aiTutor.clipboardStableMs": {
-          "type": "number",
-          "default": 1000,
-          "minimum": 0,
-          "description": "剪贴板文本保持不变达到该时长后才触发自动讲解，避免未选完就发送。"
-        },
-        "aiTutor.autoCapturePdfSelection": {
-          "type": "boolean",
-          "default": true,
-          "description": "当活动标签为 PDF 时，自动尝试复制当前选区到剪贴板，再触发讲解。"
-        },
-        "aiTutor.includeFileContext": {
-          "type": "boolean",
-          "default": true,
-          "description": "是否附带文件名和行号信息给模型。"
-        },
-        "aiTutor.openai.endpoint": {
-          "type": "string",
-          "default": "https://api.openai.com/v1/chat/completions",
-          "description": "模型接口地址（provider=openaiCompatible 时生效）。"
-        },
-        "aiTutor.openai.protocol": {
-          "type": "string",
-          "enum": [
-            "openai",
-            "anthropic"
-          ],
-          "default": "openai",
-          "description": "接口协议类型：openai=OpenAI Chat Completions 风格；anthropic=Anthropic Messages 风格。"
-        },
-        "aiTutor.openai.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "模型接口 API Key（provider=openaiCompatible 时生效）。"
-        },
-        "aiTutor.openai.model": {
-          "type": "string",
-          "default": "gpt-4o-mini",
-          "description": "OpenAI 兼容接口模型名（provider=openaiCompatible 时生效）。"
-        },
-        "aiTutor.openai.visionEndpoint": {
-          "type": "string",
-          "default": "",
-          "description": "视觉请求专用接口地址（留空则复用 aiTutor.openai.endpoint）。"
-        },
-        "aiTutor.openai.visionModel": {
-          "type": "string",
-          "default": "",
-          "description": "视觉请求专用模型名（留空则复用 aiTutor.openai.model）。"
-        },
-        "aiTutor.openai.apiKeyHeader": {
-          "type": "string",
-          "default": "Authorization",
-          "description": "API Key 请求头名称，例如 Authorization 或 api-key。"
-        },
-        "aiTutor.openai.apiKeyPrefix": {
-          "type": "string",
-          "default": "Bearer ",
-          "description": "API Key 前缀（openai 协议常用 Bearer ；anthropic 协议会忽略该项）。"
-        },
-        "aiTutor.openai.anthropicVersion": {
-          "type": "string",
-          "default": "2023-06-01",
-          "description": "Anthropic 协议请求头 anthropic-version 的值。"
-        },
-        "aiTutor.openai.anthropicBeta": {
-          "type": "string",
-          "default": "",
-          "description": "Anthropic 可选请求头 anthropic-beta 的值（留空不发送）。"
-        },
-        "aiTutor.openai.anthropicMaxTokens": {
-          "type": "number",
-          "default": 1024,
-          "minimum": 1,
-          "description": "Anthropic 协议请求的 max_tokens 默认值（文本/图片都会使用）。"
-        },
-        "aiTutor.openai.extraHeadersJson": {
-          "type": "string",
-          "default": "{}",
-          "description": "额外请求头（JSON 对象字符串），用于兼容国产模型网关。"
-        },
-        "aiTutor.openai.extraBodyJson": {
-          "type": "string",
-          "default": "{}",
-          "description": "额外请求体字段（JSON 对象字符串），会合并到 body。"
-        },
-        "aiTutor.openai.visionExtraBodyJson": {
-          "type": "string",
-          "default": "{}",
-          "description": "视觉请求额外请求体字段（JSON 对象字符串），用于兼容不同 API 网关。"
-        },
-        "aiTutor.openai.responseTextPath": {
-          "type": "string",
-          "default": "choices.0.message.content",
-          "description": "响应中文本字段路径（点号路径）。openai 常用 choices.0.message.content；anthropic 常用 content.0.text。"
-        },
-        "aiTutor.openai.visionResponseTextPath": {
-          "type": "string",
-          "default": "",
-          "description": "视觉响应文本字段路径（点号路径，留空则复用 aiTutor.openai.responseTextPath）。"
-        },
-        "aiTutor.visionMode": {
-          "type": "string",
-          "enum": [
-            "auto",
-            "openaiCompatible",
-            "ocr"
-          ],
-          "default": "auto",
-          "description": "图片解析模式：auto=优先 OpenAI 视觉（若已配置 key），否则 OCR；openaiCompatible=强制走视觉模型；ocr=仅 OCR 文本识别。"
-        },
-        "aiTutor.imageExplainFallbackToOcr": {
-          "type": "boolean",
-          "default": true,
-          "description": "图片走视觉接口失败或未配置 key 时，是否自动回退为 OCR + 文本模型（如 Copilot）。"
-        },
-        "aiTutor.responseStyle": {
-          "type": "string",
-          "enum": [
-            "plainText",
-            "markdown"
-          ],
-          "default": "plainText",
-          "description": "回答呈现方式：plainText 为普通文本，markdown 为 Markdown 渲染。"
-        },
-        "aiTutor.systemPrompt": {
-          "type": "string",
-          "default": "你是计算机英文课件 AI 助教。默认使用中文回答。当出现英文术语时，必须给出术语对照。回答应简洁、结构化、可用于课堂学习。",
-          "description": "系统级提示词（可自定义助教角色和回答风格）。"
-        },
-        "aiTutor.explainPromptTemplate": {
-          "type": "string",
-          "default": "你是计算机英文课件助教。请使用中文讲解，但要保留关键英文术语。输出格式必须包含四部分：1) 一句话总结 2) 关键术语对照（每条使用“英文原文 -> 中文解释/翻译”）3) 逐句/分块解释（每块先贴原文短句，再给中文解释）4) 可以追问的问题（2-3条）。如果原文有歧义，请明确标注“可能含义 A/B”。\n来源信息：{{source}}\n待解释原文：\n{{text}}",
-          "description": "选中讲解提示词模板。可使用占位符：{{source}}、{{text}}。"
-        },
-        "aiTutor.followupPromptTemplate": {
-          "type": "string",
-          "default": "已知我最近选中的课件原文是：\n{{selection}}\n\n我的追问是：{{question}}\n\n请结合原文回答，并标注你引用的关键英文短语。",
-          "description": "追问提示词模板。可使用占位符：{{selection}}、{{question}}。"
-        },
-        "aiTutor.directQuestionPromptTemplate": {
-          "type": "string",
-          "default": "我的问题是：{{question}}\n\n请直接回答，并尽量给出计算机课程语境下的解释。",
-          "description": "没有选中文本时的一般提问模板。可使用占位符：{{question}}。"
-        },
-        "aiTutor.imageExplainPromptTemplate": {
-          "type": "string",
-          "default": "你是计算机课程助教。请识别这张图片中的内容并讲解。\n要求：使用中文解释，保留关键英文术语，并给出“英文 -> 中文”对照。\n如果图片内有公式，请解释公式含义和变量含义。",
-          "description": "“解释图片”按钮使用的提示词模板。可使用占位符：{{source}}（图片路径）。"
-        },
-        "aiTutor.imageQuestionPromptTemplate": {
-          "type": "string",
-          "default": "请结合这张图片回答我的问题：{{question}}",
-          "description": "图片提问（输入框有问题时）模板。可使用占位符：{{question}}。"
-        },
-        "aiTutor.imageQuestionEmptyPromptTemplate": {
-          "type": "string",
-          "default": "请识别并讲解这张图片内容。要求：中文解释，保留关键英文术语；如含公式请解释符号含义。",
-          "description": "图片提问（输入框为空时）模板。可使用占位符：{{question}}（通常为空）。"
-        },
-        "aiTutor.debugMode": {
-          "type": "boolean",
-          "default": false,
-          "description": "开发者调试模式：在输出面板打印触发门控、请求状态与取消链路日志。"
-        }
-      }
-    },
-    "commands": [
-      {
-        "command": "aiTutor.explainSelection",
-        "title": "AI 助教：讲解所选内容"
-      },
-      {
-        "command": "aiTutor.openSidebar",
-        "title": "AI 助教：打开侧边栏"
-      },
-      {
-        "command": "aiTutor.clearConversation",
-        "title": "AI 助教：清空对话"
-      },
-      {
-        "command": "aiTutor.explainClipboard",
-        "title": "AI 助教：讲解剪贴板文本"
-      },
-      {
-        "command": "aiTutor.cancelResponse",
-        "title": "AI 助教：取消当前响应"
-      },
-      {
-        "command": "aiTutor.explainImage",
-        "title": "AI 助教：讲解图片"
-      },
-      {
-        "command": "aiTutor.openPdfTutor",
-        "title": "AI 助教：打开 PDF 助教视图"
-      },
-      {
-        "command": "aiTutor.debugOpenLogs",
-        "title": "AI 助教（调试）：打开调试日志"
-      },
-      {
-        "command": "aiTutor.debugDumpState",
-        "title": "AI 助教（调试）：导出当前状态"
-      }
-    ],
-    "keybindings": [
-      {
-        "command": "aiTutor.cancelResponse",
-        "key": "ctrl+alt+q",
-        "when": "editorTextFocus || webviewFocus"
-      }
-    ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "aiTutor",
-          "title": "AI 助教",
-          "icon": "media/ai-tutor.svg"
-        }
-      ]
-    },
-    "views": {
-      "aiTutor": [
-        {
-          "id": "aiTutor.sidebar",
-          "name": "课件助教",
-          "icon": "media/ai-tutor.svg",
-          "type": "webview"
-        }
-      ]
-    },
-    "menus": {
-      "editor/context": [
-        {
-          "command": "aiTutor.explainSelection",
-          "when": "editorHasSelection",
-          "group": "navigation"
-        }
-      ]
-    }
-  },
+  "name": "ai-pdf-tutor-standalone",
+  "displayName": "AI PDF Tutor Standalone",
+  "description": "Standalone PDF reader with streaming AI explanations for selected text.",
+  "version": "0.1.0",
+  "author": "AI PDF Tutor",
+  "private": true,
+  "main": "./out/desktop/main.js",
   "scripts": {
-    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test"
+    "start": "node out/standalone/server.js",
+    "dev": "npm.cmd run compile && node out/standalone/server.js",
+    "test": "npm.cmd run compile && node out/standalone-tests/selectionGate.test.js && node out/standalone-tests/server.test.js && node out/standalone-tests/publicAssets.test.js",
+    "lint": "eslint src/desktop src/standalone src/standalone-tests",
+    "start:web": "node out/standalone/server.js",
+    "desktop": "npm.cmd run compile && electron out/desktop/main.js",
+    "pack:win": "npm.cmd run compile && electron-builder --win --dir",
+    "dist:win": "npm.cmd run compile && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^4.10.38"
   },
   "devDependencies": {
-    "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "@types/vscode": "^1.108.0",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.39.3",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"
   },
-  "dependencies": {
-    "tesseract.js": "^7.0.0"
+  "build": {
+    "appId": "com.local.aipdftutor",
+    "productName": "AI PDF Tutor",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "public/**/*",
+      "ai-tutor.config.example.json",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false,
+      "artifactName": "AI-PDF-Tutor-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

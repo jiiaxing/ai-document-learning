@@ -1,0 +1,22 @@
+{
+  "host": "127.0.0.1",
+  "port": 5178,
+  "logLevel": "debug",
+  "provider": {
+    "kind": "openaiCompatible",
+    "protocol": "openai",
+    "endpoint": "https://api.openai.com/v1/chat/completions",
+    "model": "gpt-4o-mini",
+    "apiKey": "",
+    "apiKeyHeader": "Authorization",
+    "apiKeyPrefix": "Bearer ",
+    "responseTextPath": "choices.0.message.content",
+    "extraHeaders": {},
+    "extraBody": {}
+  },
+  "systemPrompt": "你是计算机课程 PDF 助教。回答必须完全基于用户提供的 PDF 选区与周围页面上下文，不要编造外部资料。默认使用中英双语：中文解释为主，关键术语保留英文原词。只解释用户选中的内容或追问的问题，周围页面上下文只用于消歧、定位定义和补足前后逻辑。",
+  "explainPromptTemplate": "请基于 PDF 周围页面上下文，精准讲解用户选中的部分。\\n\\n## 来源\\n{{source}}\\n\\n## 用户选区（只讲解这部分）\\n{{text}}\\n\\n## 周围页面上下文（仅用于理解，不要泛泛复述）\\n{{pageContext}}\\n\\n## 输出要求\\n1. 使用 Markdown。\\n2. 先给出“结构化知识点”：用层级项目符号拆出概念、机制、流程、因果关系。\\n3. 中英双语解释：中文说明为主，关键术语写成“中文解释 (English term)”。\\n4. 完全基于上下文，说明该选区在本页/相邻页中的精准含义。\\n5. 如果上下文不足，明确说“上下文不足”，不要猜测。\\n6. 不要讲解未被选中的大段背景。",
+  "translatePromptTemplate": "请把下面 PDF 选中文本做结构化翻译。\\n\\n## 来源\\n{{source}}\\n\\n## 原文\\n{{text}}\\n\\n## 输出要求\\n1. 使用 Markdown。\\n2. 先输出“整段翻译”：完整、通顺地翻译整段选中文本。\\n3. 再输出“关键词汇对照”：从整段翻译中挑出关键中文词组，并用括号补充英文原词，例如：操作系统 (operating system)。\\n4. 最后输出“关键单词讲解”：解释重要英文词/短语的通用释义、在本段里的具体含义、为什么这样翻译。\\n5. 不要加入与原文无关的扩展内容。",
+  "followupPromptTemplate": "请只回答用户追问的问题，并基于最近选区与周围页面上下文。\\n\\n## 最近选区\\n{{selection}}\\n\\n## 周围页面上下文（仅用于理解，不要泛泛复述）\\n{{pageContext}}\\n\\n## 用户追问\\n{{question}}\\n\\n## 输出要求\\n1. 使用 Markdown。\\n2. 直接回答追问，不重复完整讲解选区。\\n3. 必须引用相关英文原词或短语，并给出中文解释。\\n4. 如果上下文不足，明确指出缺少哪些信息。",
+  "maxSelectionChars": 6000
+}

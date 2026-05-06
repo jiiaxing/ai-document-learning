@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI PDF Tutor</title>
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <span class="brand-mark">AI</span>
+            <div>
+                <strong>PDF Tutor</strong>
+                <span id="connectionStatus">初始化</span>
+            </div>
+        </div>
+
+        <form id="settingsForm" class="settings-bar" autocomplete="off">
+            <label>
+                <span>Provider</span>
+                <select id="providerKind">
+                    <option value="mock">Mock</option>
+                    <option value="openaiCompatible">OpenAI Compatible</option>
+                </select>
+            </label>
+            <label>
+                <span>协议</span>
+                <select id="protocol">
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                </select>
+            </label>
+            <label class="wide-field">
+                <span>Endpoint</span>
+                <input id="endpoint" type="url" placeholder="https://api.openai.com/v1/chat/completions" />
+            </label>
+            <label>
+                <span>Model</span>
+                <input id="model" type="text" placeholder="gpt-4o-mini" />
+            </label>
+            <label>
+                <span>API Key</span>
+                <input id="apiKey" type="password" autocomplete="new-password" placeholder="留空则保留已保存 key" />
+            </label>
+            <label class="inline-check">
+                <input id="clearApiKey" type="checkbox" />
+                <span>清除 key</span>
+            </label>
+            <button id="saveSettings" class="primary" type="submit">保存设置</button>
+            <span id="settingsStatus" class="settings-status"></span>
+
+            <details class="advanced-settings">
+                <summary>高级</summary>
+                <div class="advanced-grid">
+                    <label>
+                        <span>Key Header</span>
+                        <input id="apiKeyHeader" type="text" />
+                    </label>
+                    <label>
+                        <span>Key Prefix</span>
+                        <input id="apiKeyPrefix" type="text" />
+                    </label>
+                    <label>
+                        <span>Response Path</span>
+                        <input id="responseTextPath" type="text" />
+                    </label>
+                    <label>
+                        <span>Max chars</span>
+                        <input id="maxSelectionChars" type="number" min="100" step="100" />
+                    </label>
+                    <label>
+                        <span>视觉选择</span>
+                        <select id="visualSelectionStyle">
+                            <option value="path">画线条</option>
+                            <option value="box">拉框</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Anthropic Version</span>
+                        <input id="anthropicVersion" type="text" />
+                    </label>
+                    <label>
+                        <span>Anthropic Max Tokens</span>
+                        <input id="anthropicMaxTokens" type="number" min="1" />
+                    </label>
+                    <label class="textarea-field">
+                        <span>Extra Headers JSON</span>
+                        <textarea id="extraHeadersJson" rows="3"></textarea>
+                    </label>
+                    <label class="textarea-field">
+                        <span>Extra Body JSON</span>
+                        <textarea id="extraBodyJson" rows="3"></textarea>
+                    </label>
+                </div>
+                <div class="prompt-grid">
+                    <label class="prompt-field">
+                        <span>系统提示词</span>
+                        <textarea id="systemPrompt" rows="4"></textarea>
+                    </label>
+                    <label class="prompt-field">
+                        <span>讲解提示词</span>
+                        <textarea id="explainPromptTemplate" rows="5"></textarea>
+                    </label>
+                    <label class="prompt-field">
+                        <span>翻译提示词</span>
+                        <textarea id="translatePromptTemplate" rows="5"></textarea>
+                    </label>
+                    <label class="prompt-field">
+                        <span>追问提示词</span>
+                        <textarea id="followupPromptTemplate" rows="5"></textarea>
+                    </label>
+                </div>
+            </details>
+        </form>
+    </header>
+
+    <section class="file-toolbar">
+        <button id="openPdf" class="primary" type="button">打开 PDF</button>
+        <input id="pdfInput" type="file" accept="application/pdf,.pdf" hidden />
+        <select id="workspacePdfSelect" aria-label="工作区 PDF"></select>
+        <button id="openWorkspacePdf" type="button">打开工作区 PDF</button>
+        <button id="prevPage" type="button" aria-label="上一页">←</button>
+        <span id="pageInfo" class="page-info">- / -</span>
+        <input id="pageJumpInput" class="page-jump-input" type="number" min="1" step="1" aria-label="跳转页码" placeholder="页码" />
+        <button id="pageJumpButton" type="button">跳转</button>
+        <input id="pageSlider" class="page-slider" type="range" min="1" max="1" step="1" value="1" aria-label="页码滑块" disabled />
+        <label class="inline-check reader-mode-control">
+            <span>阅读模式</span>
+            <select id="readerMode" aria-label="阅读模式">
+                <option value="single">单页</option>
+                <option value="continuous">连续</option>
+            </select>
+        </label>
+        <button id="explainPage" type="button">讲解本页</button>
+        <button id="translatePage" type="button">翻译本页</button>
+        <button id="nextPage" type="button" aria-label="下一页">→</button>
+        <button id="zoomOut" type="button" aria-label="缩小">−</button>
+        <span id="zoomInfo" class="page-info">125%</span>
+        <button id="zoomIn" type="button" aria-label="放大">+</button>
+        <label class="inline-check">
+            <input id="autoTranslate" type="checkbox" checked />
+            <span>选区后自动翻译</span>
+        </label>
+        <label class="inline-check">
+            <input id="autoExplain" type="checkbox" checked />
+            <span>选区后自动讲解</span>
+        </label>
+        <label class="inline-check">
+            <input id="editMode" type="checkbox" />
+            <span>批注模式</span>
+        </label>
+        <button id="addHighlight" type="button">高亮选区</button>
+        <button id="undoHighlight" type="button">撤销高亮</button>
+        <button id="addNote" type="button">笔记</button>
+        <button id="noteFontDown" type="button" aria-label="减小笔记字号">A−</button>
+        <span id="noteFontInfo" class="page-info">字号</span>
+        <button id="noteFontUp" type="button" aria-label="增大笔记字号">A+</button>
+        <button id="deleteNote" type="button">删除笔记</button>
+        <label class="inline-check">
+            <input id="lineMode" type="checkbox" />
+            <span>线条模式</span>
+        </label>
+        <label class="inline-check">
+            <input id="eraserMode" type="checkbox" />
+            <span>橡皮</span>
+        </label>
+        <button id="clearPageAnnotations" type="button">清本页批注</button>
+    </section>
+
+    <main id="appShell" class="app-shell">
+        <aside id="translationPane" class="translation-pane">
+            <div class="pane-header">
+                <span>翻译</span>
+                <div class="pane-actions">
+                    <button id="collapseTranslation" class="icon-button" type="button" aria-label="关闭翻译栏" title="关闭翻译栏">×</button>
+                    <button id="clearTranslation" type="button">清空</button>
+                </div>
+            </div>
+            <div class="selection-card">
+                <span>当前选区</span>
+                <pre id="selectionPreview">尚未选择文本</pre>
+            </div>
+            <form id="manualTranslationForm" class="manual-translation-form">
+                <textarea id="manualTranslationInput" rows="4" placeholder="输入文本手动翻译"></textarea>
+                <button id="manualTranslationSubmit" class="primary" type="submit">翻译</button>
+            </form>
+            <div id="translationOutput" class="translation-output"></div>
+        </aside>
+
+        <div id="leftPaneResizer" class="pane-resizer left-resizer" role="separator" aria-label="调整翻译栏宽度" tabindex="0"></div>
+
+        <section class="reader-pane">
+            <div id="viewer" class="viewer" tabindex="0">
+                <div id="emptyState" class="empty-state">打开 PDF 开始</div>
+                <div id="page" class="page-wrap" hidden></div>
+                <div id="selectionActions" class="selection-actions" hidden>
+                    <button id="selectionExplain" class="primary" type="button">讲解</button>
+                    <button id="selectionTranslate" type="button">翻译</button>
+                </div>
+                <div id="visualActions" class="selection-actions visual-actions" hidden>
+                    <button id="visualExplain" class="primary" type="button">讲解</button>
+                    <button id="visualTranslate" type="button">翻译</button>
+                </div>
+            </div>
+        </section>
+
+        <div id="rightPaneResizer" class="pane-resizer right-resizer" role="separator" aria-label="调整讲解栏宽度" tabindex="0"></div>
+
+        <aside id="assistantPane" class="assistant-pane">
+            <div class="pane-header">
+                <span>AI 讲解</span>
+                <div class="assistant-actions">
+                    <button id="collapseAssistant" class="icon-button" type="button" aria-label="关闭讲解栏" title="关闭讲解栏">×</button>
+                    <button id="cancelResponse" type="button">停止</button>
+                    <button id="clearConversation" type="button">清空</button>
+                </div>
+            </div>
+            <div id="messages" class="messages"></div>
+            <form id="questionForm" class="question-form">
+                <div id="imageAttachments" class="image-attachments" aria-live="polite" hidden></div>
+                <textarea id="questionInput" rows="2" placeholder="向 AI 提问，可附图"></textarea>
+                <div class="question-actions">
+                    <button id="attachImage" type="button">图片</button>
+                    <button type="submit" class="primary">发送</button>
+                </div>
+                <input id="imageInput" type="file" accept="image/*" multiple hidden>
+            </form>
+            <details class="log-panel">
+                <summary>开发者日志</summary>
+                <pre id="clientLog"></pre>
+            </details>
+        </aside>
+        <div id="paneRestoreBar" class="pane-restore-bar">
+            <button id="restoreTranslation" type="button" hidden>显示翻译</button>
+            <button id="restoreAssistant" type="button" hidden>显示讲解</button>
+        </div>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+</body>
+</html>
