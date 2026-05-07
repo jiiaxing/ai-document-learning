@@ -3,11 +3,12 @@ const PDFJS_WORKER_URL = '/vendor/pdfjs/pdf.worker.mjs';
 const UI_PREFS_KEY = 'aiPdfTutor.uiPrefs.v1';
 const ANNOTATION_STORE_KEY = 'aiPdfTutor.annotations.v1';
 const DEFAULT_SCALE = 2.32;
-const DEFAULT_SCALE_PREF_VERSION = 2;
+const DEFAULT_SCALE_PREF_VERSION = 3;
 const DEFAULT_LAYOUT_PREF_VERSION = 2;
 const MIN_SCALE = 0.05;
+const MIN_INITIAL_SCALE = 0.8;
 const MAX_SCALE = 3.0;
-const VIEWER_MIN_AVAILABLE_WIDTH = 180;
+const VIEWER_MIN_AVAILABLE_WIDTH = 520;
 const PDF_CONTEXT_RADIUS = 1;
 const PAGE_CONTEXT_MAX_CHARS = 9000;
 const PAGE_TURN_COOLDOWN_MS = 360;
@@ -269,6 +270,7 @@ function wireEvents() {
     document.addEventListener('pointerdown', onSelectionActionDocumentPointerDown, true);
     document.addEventListener('keydown', onPdfKeydown);
     document.addEventListener('keydown', onTextSubmitShortcut, true);
+    document.addEventListener('pointerup', onDocumentSelectionPointerUp, true);
     window.addEventListener('resize', () => {
         positionSelectionActions();
         positionVisualActions();
@@ -290,11 +292,7 @@ function wireEvents() {
     elements.imageInput.addEventListener('change', onImagesPicked);
     elements.imageAttachments.addEventListener('click', onImageAttachmentClick);
     elements.questionInput.addEventListener('paste', onQuestionPaste);
-    document.addEventListener('mouseup', () => {
-        if (getPdfSelectionText()) {
-            queueSelectionProbe('mouseup');
-        }
-    }, true);
+    document.addEventListener('mouseup', () => queueTextSelectionProbe('mouseup'), true);
 }
 
 function focusViewerUnlessInteractive(event) {
@@ -439,6 +437,24 @@ function onTextSubmitShortcut(event) {
         elements.manualTranslationForm.requestSubmit();
         logClient('shortcut.submit', { target: 'translation' });
     }
+}
+
+function onDocumentSelectionPointerUp(event) {
+    if (event.button !== undefined && event.button !== 0) {
+        return;
+    }
+    queueTextSelectionProbe('pointerup');
+}
+
+function queueTextSelectionProbe(reason) {
+    if (elements.lineMode.checked || elements.eraserMode.checked || state.visualSelectionDraft) {
+        return;
+    }
+    window.setTimeout(() => {
+        if (getPdfSelectionText()) {
+            queueSelectionProbe(reason);
+        }
+    }, 0);
 }
 
 async function saveSettings(event) {
@@ -617,7 +633,9 @@ async function loadPdfBytes(bytes, name) {
     state.lineDraft = null;
     clearVisualSelection('pdf-open');
     state.noteDrag = null;
+    resetTransientAnnotationTools();
     state.scale = await scaleForNewDocument();
+    saveUiPrefs();
     selectionGate.reset();
     window.getSelection()?.removeAllRanges();
     elements.emptyState.hidden = true;
@@ -871,7 +889,7 @@ async function resetScaleToFit() {
     if (!state.pdfDoc) {
         return;
     }
-    state.scale = await computeInitialScale();
+    state.scale = await computeFitWidthScale();
     saveUiPrefs();
     await renderPage({ scroll: 'current' });
     flashStatus('已适配页面宽度');
@@ -930,6 +948,17 @@ function onEraserModeChanged() {
     }
     updateAnnotationControls();
     logClient('annotation.eraser_mode', { enabled: elements.eraserMode.checked });
+}
+
+function resetTransientAnnotationTools() {
+    elements.editMode.checked = false;
+    elements.lineMode.checked = false;
+    elements.eraserMode.checked = false;
+    elements.page.classList.remove('line-drawing-active', 'note-placement-active', 'eraser-active');
+    state.uiPrefs.editMode = false;
+    state.uiPrefs.lineMode = false;
+    state.uiPrefs.eraserMode = false;
+    updateAnnotationControls();
 }
 
 function onViewerWheel(event) {
@@ -1552,6 +1581,7 @@ function startVisualSelection(event) {
     state.visualSelectionDraft = {
         pointerId: event.pointerId,
         page: point.page,
+        style: visualSelectionStyle(),
         start: point,
         end: point,
         points: [{ x: point.x, y: point.y }]
@@ -1561,7 +1591,7 @@ function startVisualSelection(event) {
 }
 
 function updateVisualSelectionDraft(event) {
-    const point = pointToPageRatio(event);
+    const point = pointToPageRatioForPage(event, state.visualSelectionDraft.page);
     if (!point || point.page !== state.visualSelectionDraft.page) {
         return;
     }
@@ -1576,7 +1606,7 @@ function finishVisualSelection(event) {
     if (!draft) {
         return;
     }
-    const point = pointToPageRatio(event);
+    const point = pointToPageRatioForPage(event, draft.page);
     if (point && point.page === draft.page) {
         draft.end = point;
         pushVisualSelectionPoint(draft.points, point, true);
@@ -1593,7 +1623,7 @@ function finishVisualSelection(event) {
             page,
             rect: { x: 0, y: 0, width: 1, height: 1 },
             kind: 'page',
-            style: visualSelectionStyle()
+            style: draft.style || visualSelectionStyle()
         };
         showVisualActions('context-page-menu');
         logClient('visual.selection.context_menu', { page });
@@ -1603,7 +1633,7 @@ function finishVisualSelection(event) {
         page: draft.page,
         rect,
         kind: 'region',
-        style: visualSelectionStyle(),
+        style: draft.style || visualSelectionStyle(),
         points: draft.points
     };
     renderVisualSelection();
@@ -1616,14 +1646,28 @@ function finishVisualSelection(event) {
 }
 
 function rectFromVisualDraft(draft) {
-    const points = draft.points?.length ? draft.points : [draft.start, draft.end];
-    const rawRect = rawRectFromPoints(points);
+    const rawRect = rawRectFromVisualDraft(draft);
     return rawRect ? padVisualSelectionRect(rawRect) : null;
 }
 
 function rawRectFromVisualDraft(draft) {
-    const points = draft.points?.length ? draft.points : [draft.start, draft.end];
-    return rawRectFromPoints(points);
+    if ((draft.style || visualSelectionStyle()) === VISUAL_SELECTION_STYLE_BOX) {
+        return rawRectFromCorners(draft.start, draft.end);
+    }
+    return rawRectFromPoints(draft.points?.length ? draft.points : [draft.start, draft.end]);
+}
+
+function rawRectFromCorners(start, end) {
+    const left = Math.max(0, Math.min(start.x, end.x));
+    const top = Math.max(0, Math.min(start.y, end.y));
+    const right = Math.min(1, Math.max(start.x, end.x));
+    const bottom = Math.min(1, Math.max(start.y, end.y));
+    const width = right - left;
+    const height = bottom - top;
+    if (width <= 0 || height <= 0) {
+        return null;
+    }
+    return { x: left, y: top, width, height };
 }
 
 function rawRectFromPoints(points) {
@@ -1673,7 +1717,7 @@ function renderVisualSelectionDraft() {
     }
     layer.querySelector('.visual-selection-rect')?.remove();
     const rect = rectFromVisualDraft(draft) || { x: draft.start.x, y: draft.start.y, width: 0, height: 0 };
-    const node = createVisualSelectionSvg(rect, draft.points || [draft.start, draft.end], visualSelectionStyle());
+    const node = createVisualSelectionSvg(rect, draft.points || [draft.start, draft.end], draft.style || visualSelectionStyle());
     layer.appendChild(node);
 }
 
@@ -1757,6 +1801,15 @@ function pointToPageRatio(event) {
         return null;
     }
     const pageNumber = Number(pageNode.dataset.page || state.currentPage);
+    return pointToPageRatioInNode(event, pageNode, pageNumber);
+}
+
+function pointToPageRatioForPage(event, pageNumber) {
+    const pageNode = pageElementForPage(pageNumber);
+    return pageNode ? pointToPageRatioInNode(event, pageNode, pageNumber) : null;
+}
+
+function pointToPageRatioInNode(event, pageNode, pageNumber) {
     const pageRect = pageNode.getBoundingClientRect();
     if (!pageRect.width || !pageRect.height) {
         return null;
@@ -3196,23 +3249,35 @@ function zoomStep() {
 
 async function scaleForNewDocument() {
     const saved = Number(state.uiPrefs.scale);
-    const fitScale = await computeInitialScale();
-    if (!Number.isFinite(saved)) {
-        return fitScale;
+    if (Number.isFinite(saved) && saved >= MIN_INITIAL_SCALE) {
+        return clamp(saved, MIN_SCALE, MAX_SCALE);
     }
-    return Math.max(MIN_SCALE, Math.min(MAX_SCALE, saved, fitScale));
+    return computeInitialScale();
 }
 
 async function computeInitialScale() {
+    const fitScale = await computeFitWidthScale();
+    return Math.max(MIN_INITIAL_SCALE, fitScale);
+}
+
+async function computeFitWidthScale() {
     if (!state.pdfDoc) {
         return DEFAULT_SCALE;
     }
 
     const page = await state.pdfDoc.getPage(1);
     const viewport = page.getViewport({ scale: 1 });
-    const availableWidth = Math.max(VIEWER_MIN_AVAILABLE_WIDTH, elements.viewer.clientWidth - 56);
+    const availableWidth = availableViewerWidth();
     const fitScale = availableWidth / viewport.width;
-    return Math.max(MIN_SCALE, Math.min(MAX_SCALE, fitScale));
+    return clamp(fitScale, MIN_SCALE, MAX_SCALE);
+}
+
+function availableViewerWidth() {
+    return Math.max(
+        VIEWER_MIN_AVAILABLE_WIDTH,
+        (elements.viewer?.clientWidth || 0) - 56,
+        Math.round((window.innerWidth || 0) * 0.42)
+    );
 }
 
 async function buildPageContext(pageNumber) {
@@ -3504,9 +3569,9 @@ function loadUiPrefs() {
         return {
             autoTranslate: typeof parsed.autoTranslate === 'boolean' ? parsed.autoTranslate : true,
             autoExplain: typeof parsed.autoExplain === 'boolean' ? parsed.autoExplain : true,
-            editMode: typeof parsed.editMode === 'boolean' ? parsed.editMode : false,
-            lineMode: typeof parsed.lineMode === 'boolean' ? parsed.lineMode : false,
-            eraserMode: typeof parsed.eraserMode === 'boolean' ? parsed.eraserMode : false,
+            editMode: false,
+            lineMode: false,
+            eraserMode: false,
             visualSelectionStyle: parsed.visualSelectionStyle === VISUAL_SELECTION_STYLE_BOX
                 ? VISUAL_SELECTION_STYLE_BOX
                 : VISUAL_SELECTION_STYLE_PATH,
@@ -3622,13 +3687,13 @@ function visualSelectionStyle() {
 
 function savedScalePreference(parsed) {
     const scale = Number(parsed.scale);
-    if (!Number.isFinite(scale)) {
+    if (!Number.isFinite(scale) || scale < MIN_SCALE || scale > MAX_SCALE) {
         return null;
     }
     if (Number(parsed.scalePreferenceVersion) === DEFAULT_SCALE_PREF_VERSION) {
         return scale;
     }
-    return scale > DEFAULT_SCALE ? scale : null;
+    return scale >= MIN_INITIAL_SCALE ? scale : null;
 }
 
 function savedPaneWidthPreference(parsed, key, legacyWidth, fallbackWidth, minWidth, maxWidth) {

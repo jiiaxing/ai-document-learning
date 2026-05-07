@@ -25,6 +25,8 @@ test('front-end script remains syntactically valid JavaScript', () => {
 
 test('front-end auto explain only probes selection after mouse release', () => {
     assert.ok(appJs.includes("document.addEventListener('mouseup'"));
+    assert.ok(appJs.includes("document.addEventListener('pointerup', onDocumentSelectionPointerUp"));
+    assert.ok(appJs.includes('function queueTextSelectionProbe'));
     assert.ok(appJs.includes('if (getPdfSelectionText())'));
     assert.equal(appJs.includes("document.addEventListener('selectionchange'"), false);
 });
@@ -88,12 +90,17 @@ test('front-end supports visible PDF reader scrollbars and direct page jumping',
     assert.ok(stylesCss.includes('.page-slider'));
 });
 
-test('front-end fits oversized PDFs and allows very small zoom levels', () => {
+test('front-end keeps open zoom readable while retaining fit-width zoom out', () => {
     assert.ok(appJs.includes('const MIN_SCALE = 0.05'));
-    assert.ok(appJs.includes('const VIEWER_MIN_AVAILABLE_WIDTH = 180'));
+    assert.ok(appJs.includes('const MIN_INITIAL_SCALE = 0.8'));
+    assert.ok(appJs.includes('const VIEWER_MIN_AVAILABLE_WIDTH = 520'));
     assert.ok(appJs.includes('async function scaleForNewDocument'));
-    assert.ok(appJs.includes('return Math.max(MIN_SCALE, Math.min(MAX_SCALE, saved, fitScale));'));
-    assert.ok(appJs.includes('return Math.max(MIN_SCALE, Math.min(MAX_SCALE, fitScale));'));
+    assert.ok(appJs.includes('saved >= MIN_INITIAL_SCALE'));
+    assert.ok(appJs.includes('return Math.max(MIN_INITIAL_SCALE, fitScale);'));
+    assert.ok(appJs.includes('async function computeFitWidthScale'));
+    assert.ok(appJs.includes('state.scale = await computeFitWidthScale();'));
+    assert.ok(appJs.includes('return scale >= MIN_INITIAL_SCALE ? scale : null;'));
+    assert.ok(appJs.includes('function availableViewerWidth'));
     assert.ok(appJs.includes('elements.zoomInfo.addEventListener'));
     assert.ok(appJs.includes('resetScaleToFit'));
     assert.ok(appJs.includes('function zoomStep'));
@@ -197,6 +204,9 @@ test('front-end renders editable note boxes and erasable freehand lines', () => 
     assert.equal(appJs.includes('pendingFreeNoteText'), false);
     assert.ok(appJs.includes('lineMode: document.getElementById'));
     assert.ok(appJs.includes('eraserMode: document.getElementById'));
+    assert.ok(appJs.includes('function resetTransientAnnotationTools'));
+    assert.ok(appJs.includes('editMode: false'));
+    assert.ok(appJs.includes('saveUiPrefs();'));
     assert.ok(appJs.includes("elements.page.addEventListener('pointerdown', onPagePointerDown)"));
     assert.ok(appJs.includes("type: 'line'"));
     assert.ok(appJs.includes("document.createElementNS('http://www.w3.org/2000/svg', 'polyline')"));
@@ -242,6 +252,8 @@ test('front-end supports page image actions and right-click visual selection', (
     assert.ok(appJs.includes('VISUAL_SELECTION_STYLE_PATH'));
     assert.ok(appJs.includes('function renderVisualSelection'));
     assert.ok(appJs.includes('function rawRectFromVisualDraft'));
+    assert.ok(appJs.includes('function rawRectFromCorners'));
+    assert.ok(appJs.includes('pointToPageRatioForPage(event, draft.page)'));
     assert.ok(appJs.includes('function padVisualSelectionRect'));
     assert.ok(appJs.includes('pushVisualSelectionPoint'));
     assert.ok(appJs.includes('function explainVisualSelectionFromAction'));
@@ -258,6 +270,7 @@ test('front-end supports page image actions and right-click visual selection', (
     assert.ok(visualActionsSmoke.includes("clickVisualAction('visualExplain')"));
     assert.ok(visualActionsSmoke.includes("clickVisualAction('visualTranslate')"));
     assert.ok(visualActionsSmoke.includes('process.env.VISUAL_STYLE'));
+    assert.ok(visualActionsSmoke.includes("visualStyle === 'box'"));
     assert.ok(visualActionsSmoke.includes('rootHasPathOnly'));
     assert.ok(visualActionsSmoke.includes('rootHasBoxOnly'));
     assert.ok(visualActionsSmoke.includes('process.env.PDF_FILE'));

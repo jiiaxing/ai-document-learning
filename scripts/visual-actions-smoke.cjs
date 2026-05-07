@@ -154,14 +154,20 @@ async function selectVisualRegion() {
         throw new Error(`Unexpected page rect: ${JSON.stringify(pageRect)}`);
     }
 
-    const points = [
-        { x: pageRect.left + pageRect.width * 0.24, y: pageRect.top + pageRect.height * 0.20 },
-        { x: pageRect.left + pageRect.width * 0.38, y: pageRect.top + pageRect.height * 0.17 },
-        { x: pageRect.left + pageRect.width * 0.50, y: pageRect.top + pageRect.height * 0.25 },
-        { x: pageRect.left + pageRect.width * 0.47, y: pageRect.top + pageRect.height * 0.38 },
-        { x: pageRect.left + pageRect.width * 0.28, y: pageRect.top + pageRect.height * 0.37 },
-        { x: pageRect.left + pageRect.width * 0.24, y: pageRect.top + pageRect.height * 0.20 }
-    ].map((point) => ({ x: Math.round(point.x), y: Math.round(point.y) }));
+    const points = (visualStyle === 'box'
+        ? [
+            { x: pageRect.left + pageRect.width * 0.24, y: pageRect.top + pageRect.height * 0.20 },
+            { x: pageRect.left + pageRect.width * 0.41, y: pageRect.top + pageRect.height * 0.29 },
+            { x: pageRect.left + pageRect.width * 0.52, y: pageRect.top + pageRect.height * 0.40 }
+        ]
+        : [
+            { x: pageRect.left + pageRect.width * 0.24, y: pageRect.top + pageRect.height * 0.20 },
+            { x: pageRect.left + pageRect.width * 0.38, y: pageRect.top + pageRect.height * 0.17 },
+            { x: pageRect.left + pageRect.width * 0.50, y: pageRect.top + pageRect.height * 0.25 },
+            { x: pageRect.left + pageRect.width * 0.47, y: pageRect.top + pageRect.height * 0.38 },
+            { x: pageRect.left + pageRect.width * 0.28, y: pageRect.top + pageRect.height * 0.37 },
+            { x: pageRect.left + pageRect.width * 0.24, y: pageRect.top + pageRect.height * 0.20 }
+        ]).map((point) => ({ x: Math.round(point.x), y: Math.round(point.y) }));
 
     await rightDrag(points);
     await waitUntil('!document.getElementById("visualActions").hidden && Boolean(document.querySelector(".visual-selection-rect"))');
