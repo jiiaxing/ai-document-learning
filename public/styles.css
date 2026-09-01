@@ -925,6 +925,11 @@ button:focus-visible {
     box-shadow: var(--shadow);
 }
 
+.page-content {
+    position: relative;
+    transform-origin: 0 0;
+}
+
 .page-stack {
     width: 100%;
     display: grid;

@@ -16,6 +16,11 @@ const PAGE_TURN_COOLDOWN_MS = 360;
 const FILE_PANEL_TRANSITION_MS = 220;
 const ACTION_MENU_GAP = 12;
 const ACTION_MENU_EDGE_GAP = 8;
+const SMOOTH_ZOOM_RENDER_DELAY_MS = 180;
+const SMOOTH_ZOOM_SENSITIVITY = 0.001;
+const SMOOTH_ZOOM_MAX_DELTA = 140;
+const CTRL_ZOOM_WHEEL_GUARD_MS = 320;
+const ZOOM_PREVIEW_EPSILON = 0.001;
 const NOTE_DEFAULT_FONT_SIZE = 15;
 const NOTE_MIN_FONT_SIZE = 6;
 const NOTE_MAX_FONT_SIZE = 72;
@@ -188,6 +193,7 @@ const state = {
     pdfDoc: null,
     currentPage: 1,
     scale: initialUiPrefs.scale || DEFAULT_SCALE,
+    renderedScale: 0,
     fileName: '',
     pageTextCache: new Map(),
     annotations: loadAnnotations(),
@@ -212,6 +218,11 @@ const state = {
     lastPageTurnAt: 0,
     pageJumpTimer: 0,
     renderLock: false,
+    zoomRenderTimer: 0,
+    zoomPreviewFrame: 0,
+    pendingZoomAnchor: null,
+    ctrlZoomKeyDown: false,
+    ctrlZoomWheelGuardUntil: 0,
     selectionTimer: 0,
     annotationSaveTimer: 0,
     pendingAnnotationSave: null,
@@ -306,6 +317,8 @@ function wireEvents() {
     document.addEventListener('pointerdown', onDocumentPointerDown, true);
     document.addEventListener('mousedown', onDocumentPointerDown, true);
     document.addEventListener('pointerdown', onSelectionActionDocumentPointerDown, true);
+    document.addEventListener('keydown', onZoomModifierKeydown, true);
+    document.addEventListener('keyup', onZoomModifierKeyup, true);
     document.addEventListener('keydown', onPdfKeydown);
     document.addEventListener('keydown', onTextSubmitShortcut, true);
     document.addEventListener('pointerup', onDocumentSelectionPointerUp, true);
@@ -332,6 +345,7 @@ function wireEvents() {
     elements.questionInput.addEventListener('paste', onQuestionPaste);
     document.addEventListener('pointerdown', onReadingFileDocumentPointerDown, true);
     document.addEventListener('mouseup', (event) => queueTextSelectionProbe('mouseup', actionAnchorFromEvent(event)), true);
+    window.addEventListener('blur', resetZoomModifierState);
 }
 
 function focusViewerUnlessInteractive(event) {
@@ -1014,6 +1028,7 @@ async function maybeOpenPdfFromQuery() {
 }
 
 async function loadPdfBytes(bytes, name, options = {}) {
+    cancelSmoothZoom();
     state.pdfDoc = await state.pdfjsLib.getDocument({ data: bytes }).promise;
     state.fileName = name;
     state.currentPage = 1;
@@ -1050,6 +1065,7 @@ async function loadPdfBytes(bytes, name, options = {}) {
 }
 
 function resetReaderDocument() {
+    cancelSmoothZoom();
     state.pdfDoc = null;
     state.currentPage = 1;
     state.fileName = '';
@@ -1081,32 +1097,45 @@ async function renderPage(options = {}) {
         return;
     }
 
+    cancelQueuedZoomPreviewFrame();
+    window.clearTimeout(state.zoomRenderTimer);
+    state.zoomRenderTimer = 0;
+    const renderScale = Number.isFinite(options.renderScale) ? options.renderScale : state.scale;
+    let completed = false;
     state.renderLock = true;
     setBusy(true, '渲染页面');
     const mode = readerMode();
-    logClient('pdf.page.render.start', { page: state.currentPage, scale: state.scale, mode });
+    logClient('pdf.page.render.start', { page: state.currentPage, scale: renderScale, mode });
     try {
         window.getSelection()?.removeAllRanges();
         if (mode === READER_MODE_CONTINUOUS) {
-            await renderContinuousPages(options);
+            await renderContinuousPages(options, renderScale);
         } else {
-            await renderSinglePage();
+            await renderSinglePage(renderScale);
             const restoredZoomAnchor = restoreZoomAnchor(options.zoomAnchor);
             if (!restoredZoomAnchor && options.scroll === 'current') {
                 scrollToPage(state.currentPage, 'top');
             }
         }
+        completed = true;
     } finally {
         state.renderLock = false;
+        if (completed) {
+            state.renderedScale = renderScale;
+            clearSmoothZoomPreviewStyles();
+            if (Math.abs(state.scale - renderScale) > ZOOM_PREVIEW_EPSILON) {
+                scheduleSmoothZoomRender('queued-zoom');
+            }
+        }
         setBusy(false);
         updateToolbar();
     }
 }
 
-async function renderSinglePage() {
+async function renderSinglePage(renderScale = state.scale) {
     elements.page.className = 'page-wrap';
     elements.page.dataset.page = String(state.currentPage);
-    const viewport = await renderPdfPage(state.currentPage, elements.page);
+    const viewport = await renderPdfPage(state.currentPage, elements.page, renderScale);
     logClient('pdf.page.render.done', {
         page: state.currentPage,
         width: Math.round(viewport.width),
@@ -1115,21 +1144,21 @@ async function renderSinglePage() {
     });
 }
 
-async function renderContinuousPages(options = {}) {
+async function renderContinuousPages(options = {}, renderScale = state.scale) {
     const pageCount = state.pdfDoc.numPages;
     elements.page.className = 'page-stack';
     elements.page.removeAttribute('data-page');
     elements.page.style.width = '';
     elements.page.style.height = '';
     elements.page.innerHTML = '';
-    logClient('pdf.continuous.render.start', { pages: pageCount, scale: state.scale });
+    logClient('pdf.continuous.render.start', { pages: pageCount, scale: renderScale });
 
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
         const pageNode = document.createElement('div');
         pageNode.className = 'page-wrap';
         pageNode.dataset.page = String(pageNumber);
         elements.page.appendChild(pageNode);
-        await renderPdfPage(pageNumber, pageNode);
+        await renderPdfPage(pageNumber, pageNode, renderScale);
     }
 
     const restoredZoomAnchor = restoreZoomAnchor(options.zoomAnchor);
@@ -1143,30 +1172,38 @@ async function renderContinuousPages(options = {}) {
     } else if (options.scroll !== 'keep') {
         elements.viewer.scrollTop = 0;
     }
-    logClient('pdf.continuous.render.done', { pages: pageCount, scale: state.scale });
+    logClient('pdf.continuous.render.done', { pages: pageCount, scale: renderScale });
 }
 
-async function renderPdfPage(pageNumber, pageNode) {
+async function renderPdfPage(pageNumber, pageNode, renderScale = state.scale) {
     const page = await state.pdfDoc.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: state.scale });
+    const viewport = page.getViewport({ scale: renderScale });
     pageNode.innerHTML = '';
     pageNode.style.width = `${viewport.width}px`;
     pageNode.style.height = `${viewport.height}px`;
+    pageNode.dataset.renderedWidth = String(viewport.width);
+    pageNode.dataset.renderedHeight = String(viewport.height);
+
+    const pageContent = document.createElement('div');
+    pageContent.className = 'page-content';
+    pageContent.style.width = `${viewport.width}px`;
+    pageContent.style.height = `${viewport.height}px`;
+    pageNode.appendChild(pageContent);
 
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
-    pageNode.appendChild(canvas);
+    pageContent.appendChild(canvas);
 
     const textLayer = document.createElement('div');
     textLayer.className = 'textLayer';
     textLayer.dataset.page = String(pageNumber);
-    pageNode.appendChild(textLayer);
+    pageContent.appendChild(textLayer);
 
     const annotationLayer = document.createElement('div');
     annotationLayer.className = 'annotationLayer';
     annotationLayer.dataset.page = String(pageNumber);
-    pageNode.appendChild(annotationLayer);
+    pageContent.appendChild(annotationLayer);
 
     const ctx = canvas.getContext('2d');
     await page.render({ canvasContext: ctx, viewport }).promise;
@@ -1268,6 +1305,123 @@ function restoreZoomAnchor(anchor) {
     return true;
 }
 
+function queueSmoothZoomPreview(anchor) {
+    if (anchor) {
+        state.pendingZoomAnchor = anchor;
+    }
+    if (state.renderLock || state.zoomPreviewFrame) {
+        return;
+    }
+    state.zoomPreviewFrame = window.requestAnimationFrame(() => {
+        state.zoomPreviewFrame = 0;
+        applySmoothZoomPreview(state.pendingZoomAnchor);
+    });
+}
+
+function applySmoothZoomPreview(anchor) {
+    if (!state.pdfDoc || state.renderLock) {
+        return;
+    }
+    const renderedScale = Number(state.renderedScale) || state.scale;
+    const previewRatio = state.scale / renderedScale;
+    if (!Number.isFinite(previewRatio) || Math.abs(previewRatio - 1) < ZOOM_PREVIEW_EPSILON) {
+        clearSmoothZoomPreviewStyles();
+        return;
+    }
+
+    const pageNodes = pageNodesForCurrentRender();
+    if (!pageNodes.length) {
+        return;
+    }
+
+    elements.viewer.classList.add('smooth-zooming');
+    for (const pageNode of pageNodes) {
+        applyPagePreviewScale(pageNode, previewRatio);
+    }
+    restoreZoomAnchor(anchor);
+    positionSelectionActions();
+    positionVisualActions();
+}
+
+function applyPagePreviewScale(pageNode, previewRatio) {
+    const baseWidth = Number(pageNode.dataset.renderedWidth) || pageNode.offsetWidth;
+    const baseHeight = Number(pageNode.dataset.renderedHeight) || pageNode.offsetHeight;
+    const pageContent = pageNode.querySelector('.page-content');
+    if (!baseWidth || !baseHeight || !pageContent) {
+        return;
+    }
+    pageNode.style.width = `${baseWidth * previewRatio}px`;
+    pageNode.style.height = `${baseHeight * previewRatio}px`;
+    pageContent.style.width = `${baseWidth}px`;
+    pageContent.style.height = `${baseHeight}px`;
+    pageContent.style.transformOrigin = '0 0';
+    pageContent.style.transform = `scale(${previewRatio})`;
+}
+
+function clearSmoothZoomPreviewStyles() {
+    cancelQueuedZoomPreviewFrame();
+    elements.viewer.classList.remove('smooth-zooming');
+    for (const pageNode of pageNodesForCurrentRender()) {
+        const baseWidth = Number(pageNode.dataset.renderedWidth);
+        const baseHeight = Number(pageNode.dataset.renderedHeight);
+        if (baseWidth) {
+            pageNode.style.width = `${baseWidth}px`;
+        }
+        if (baseHeight) {
+            pageNode.style.height = `${baseHeight}px`;
+        }
+        const pageContent = pageNode.querySelector('.page-content');
+        if (pageContent) {
+            pageContent.style.transform = '';
+            pageContent.style.transformOrigin = '';
+        }
+    }
+}
+
+function cancelQueuedZoomPreviewFrame() {
+    if (state.zoomPreviewFrame) {
+        window.cancelAnimationFrame(state.zoomPreviewFrame);
+        state.zoomPreviewFrame = 0;
+    }
+}
+
+function scheduleSmoothZoomRender(trigger) {
+    window.clearTimeout(state.zoomRenderTimer);
+    state.zoomRenderTimer = window.setTimeout(() => {
+        state.zoomRenderTimer = 0;
+        void commitSmoothZoomRender(trigger);
+    }, SMOOTH_ZOOM_RENDER_DELAY_MS);
+}
+
+async function commitSmoothZoomRender(trigger) {
+    if (!state.pdfDoc) {
+        cancelSmoothZoom();
+        return;
+    }
+    if (state.renderLock) {
+        scheduleSmoothZoomRender(trigger);
+        return;
+    }
+    const zoomAnchor = state.pendingZoomAnchor;
+    await renderPage({ scroll: 'current', zoomAnchor });
+    state.pendingZoomAnchor = null;
+    logClient('pdf.zoom.commit', { scale: state.renderedScale, trigger });
+}
+
+function cancelSmoothZoom() {
+    window.clearTimeout(state.zoomRenderTimer);
+    state.zoomRenderTimer = 0;
+    state.pendingZoomAnchor = null;
+    clearSmoothZoomPreviewStyles();
+}
+
+function pageNodesForCurrentRender() {
+    if (elements.page.classList.contains('page-wrap')) {
+        return elements.page.hidden ? [] : [elements.page];
+    }
+    return Array.from(elements.page.querySelectorAll('.page-wrap'));
+}
+
 function onPageJumpInput() {
     window.clearTimeout(state.pageJumpTimer);
     if (!state.pdfDoc || !elements.pageJumpInput.value.trim()) {
@@ -1357,6 +1511,13 @@ async function setScale(nextScale, trigger = 'zoom', options = {}) {
         return;
     }
     saveUiPrefs();
+    if (options.smooth === true) {
+        queueSmoothZoomPreview(options.zoomAnchor || null);
+        scheduleSmoothZoomRender(trigger);
+        flashStatus(`${Math.round(state.scale * 100)}%`);
+        logClient('pdf.zoom.preview', { scale: state.scale, trigger });
+        return;
+    }
     await renderPage({ scroll: 'current', zoomAnchor: options.zoomAnchor || null });
     flashStatus(`${Math.round(state.scale * 100)}%`);
     logClient('pdf.zoom.change', { scale: state.scale, trigger });
@@ -1409,21 +1570,23 @@ function resetTransientAnnotationTools() {
 }
 
 function onViewerWheel(event) {
-    if (event.ctrlKey || event.metaKey) {
+    if (isZoomModifierWheel(event)) {
         if (!state.pdfDoc) {
             return;
         }
         event.preventDefault();
-        if (state.renderLock) {
-            return;
-        }
+        markZoomWheelGuard();
         const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
         if (delta === 0) {
             return;
         }
-        const direction = delta < 0 ? 1 : -1;
         const zoomAnchor = zoomAnchorFromWheelEvent(event);
-        void setScale(state.scale + direction * zoomStep(), 'ctrl-wheel', { zoomAnchor });
+        void setScale(wheelZoomTargetScale(delta), 'ctrl-wheel', { zoomAnchor, smooth: true });
+        return;
+    }
+
+    if (isZoomWheelGuardActive()) {
+        event.preventDefault();
         return;
     }
 
@@ -1442,6 +1605,43 @@ function onViewerWheel(event) {
         event.preventDefault();
         void turnPageFromInput(-1, 'wheel', 'bottom');
     }
+}
+
+function isZoomModifierWheel(event) {
+    return event.ctrlKey || event.metaKey || state.ctrlZoomKeyDown;
+}
+
+function onZoomModifierKeydown(event) {
+    if (event.key === 'Control' || event.key === 'Meta') {
+        state.ctrlZoomKeyDown = true;
+    }
+}
+
+function onZoomModifierKeyup(event) {
+    if (event.key !== 'Control' && event.key !== 'Meta') {
+        return;
+    }
+    state.ctrlZoomKeyDown = Boolean(event.ctrlKey || event.metaKey);
+    markZoomWheelGuard();
+}
+
+function resetZoomModifierState() {
+    state.ctrlZoomKeyDown = false;
+    state.ctrlZoomWheelGuardUntil = 0;
+}
+
+function markZoomWheelGuard() {
+    state.ctrlZoomWheelGuardUntil = performance.now() + CTRL_ZOOM_WHEEL_GUARD_MS;
+}
+
+function isZoomWheelGuardActive() {
+    return performance.now() < state.ctrlZoomWheelGuardUntil;
+}
+
+function wheelZoomTargetScale(delta) {
+    const normalizedDelta = clamp(delta, -SMOOTH_ZOOM_MAX_DELTA, SMOOTH_ZOOM_MAX_DELTA);
+    const factor = Math.exp(-normalizedDelta * SMOOTH_ZOOM_SENSITIVITY);
+    return state.scale * factor;
 }
 
 function zoomAnchorFromWheelEvent(event) {
@@ -3855,16 +4055,6 @@ function updateAnnotationControls() {
     elements.page.classList.toggle('line-drawing-active', hasPdf && elements.lineMode.checked);
     elements.page.classList.toggle('note-placement-active', hasPdf && state.notePlacementMode);
     elements.page.classList.toggle('eraser-active', hasPdf && elements.eraserMode.checked);
-}
-
-function zoomStep() {
-    if (state.scale <= 0.35) {
-        return 0.05;
-    }
-    if (state.scale <= 0.8) {
-        return 0.1;
-    }
-    return 0.15;
 }
 
 async function scaleForNewDocument() {

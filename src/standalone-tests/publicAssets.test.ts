@@ -134,7 +134,10 @@ test('front-end supports wheel and keyboard page navigation', () => {
     assert.ok(appJs.includes("event.key === 'ArrowLeft' || event.key === 'PageUp'"));
     assert.ok(appJs.includes("turnPageFromInput(1, 'wheel', 'top')"));
     assert.ok(appJs.includes('event.ctrlKey || event.metaKey'));
-    assert.ok(appJs.includes("setScale(state.scale + direction * zoomStep(), 'ctrl-wheel', { zoomAnchor })"));
+    assert.ok(appJs.includes('function isZoomModifierWheel'));
+    assert.ok(appJs.includes('function isZoomWheelGuardActive'));
+    assert.ok(appJs.includes('event.preventDefault();'));
+    assert.ok(appJs.includes("setScale(wheelZoomTargetScale(delta), 'ctrl-wheel', { zoomAnchor, smooth: true })"));
 });
 
 test('front-end supports visible PDF reader scrollbars and direct page jumping', () => {
@@ -228,12 +231,24 @@ test('front-end keeps zoom lightweight through Ctrl wheel', () => {
     assert.ok(appJs.includes('async function setScale(nextScale, trigger ='));
     assert.ok(appJs.includes('return scale >= MIN_INITIAL_SCALE ? scale : null;'));
     assert.ok(appJs.includes('function availableViewerWidth'));
-    assert.ok(appJs.includes('function zoomStep'));
+    assert.ok(appJs.includes('const SMOOTH_ZOOM_RENDER_DELAY_MS = 180'));
+    assert.ok(appJs.includes('const SMOOTH_ZOOM_SENSITIVITY = 0.001'));
+    assert.ok(appJs.includes('const CTRL_ZOOM_WHEEL_GUARD_MS = 320'));
+    assert.ok(appJs.includes('function wheelZoomTargetScale'));
+    assert.ok(appJs.includes('function queueSmoothZoomPreview'));
+    assert.ok(appJs.includes('function commitSmoothZoomRender'));
+    assert.ok(appJs.includes('document.addEventListener(\'keydown\', onZoomModifierKeydown, true)'));
+    assert.ok(appJs.includes('document.addEventListener(\'keyup\', onZoomModifierKeyup, true)'));
+    assert.ok(appJs.includes('window.addEventListener(\'blur\', resetZoomModifierState)'));
+    assert.ok(appJs.includes('ctrlZoomKeyDown'));
     assert.ok(appJs.includes('function zoomAnchorFromWheelEvent'));
     assert.ok(appJs.includes('function restoreZoomAnchor'));
     assert.ok(appJs.includes('restoreZoomAnchor(options.zoomAnchor)'));
-    assert.ok(appJs.includes("setScale(state.scale + direction * zoomStep(), 'ctrl-wheel', { zoomAnchor })"));
+    assert.ok(appJs.includes('options.smooth === true'));
+    assert.ok(appJs.includes("logClient('pdf.zoom.preview'"));
+    assert.ok(appJs.includes("logClient('pdf.zoom.commit'"));
     assert.ok(appJs.includes("logClient('pdf.zoom.change'"));
+    assert.ok(stylesCss.includes('.page-content'));
     assert.equal(indexHtml.includes('id="zoomOut"'), false);
     assert.equal(indexHtml.includes('id="zoomIn"'), false);
     assert.equal(indexHtml.includes('id="zoomInfo"'), false);
