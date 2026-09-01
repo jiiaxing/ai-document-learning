@@ -58,6 +58,7 @@ test('front-end exposes prompt template settings', () => {
 test('front-end keeps provider settings in a drawer instead of the primary reader chrome', () => {
     const settingsHtml = indexHtml.slice(indexHtml.indexOf('<form id="settingsForm"'), indexHtml.indexOf('</form>') + '</form>'.length);
     const advancedSettingsHtml = indexHtml.slice(indexHtml.indexOf('<details class="advanced-settings">'), indexHtml.indexOf('</details>', indexHtml.indexOf('<details class="advanced-settings">')) + '</details>'.length);
+    const topChromeHtml = indexHtml.slice(indexHtml.indexOf('<header class="top-chrome">'), indexHtml.indexOf('<main id="appShell"'));
     const assistantPaneStart = indexHtml.indexOf('<aside id="assistantPane"');
     const assistantPaneHtml = indexHtml.slice(assistantPaneStart, indexHtml.indexOf('</aside>', assistantPaneStart) + '</aside>'.length);
 
@@ -67,6 +68,10 @@ test('front-end keeps provider settings in a drawer instead of the primary reade
     assert.ok(settingsHtml.includes('id="clientLog"'));
     assert.ok(settingsHtml.includes('开发者日志'));
     assert.ok(advancedSettingsHtml.includes('id="clientLog"'));
+    assert.ok(advancedSettingsHtml.includes('id="autoTranslate"'));
+    assert.ok(advancedSettingsHtml.includes('id="autoExplain"'));
+    assert.equal(topChromeHtml.includes('id="autoTranslate"'), false);
+    assert.equal(topChromeHtml.includes('id="autoExplain"'), false);
     assert.equal(assistantPaneHtml.includes('id="clientLog"'), false);
     assert.equal(assistantPaneHtml.includes('开发者日志'), false);
     assert.ok(indexHtml.includes('class="toolbar-group'));
@@ -118,6 +123,8 @@ test('front-end renders markdown and persists reader preferences', () => {
     assert.ok(appJs.includes('const DEFAULT_SCALE = 2.32'));
     assert.ok(appJs.includes('DEFAULT_SCALE_PREF_VERSION'));
     assert.ok(appJs.includes('DEFAULT_LAYOUT_PREF_VERSION'));
+    assert.ok(appJs.includes('DEFAULT_AUTO_TRIGGER_PREF_VERSION'));
+    assert.ok(appJs.includes('autoTriggerPreferenceVersion: DEFAULT_AUTO_TRIGGER_PREF_VERSION'));
 });
 
 test('front-end supports wheel and keyboard page navigation', () => {
@@ -285,12 +292,22 @@ test('front-end exposes local PDF annotation tools', () => {
 test('front-end supports manual text translation without PDF selection', () => {
     const topChromeHtml = indexHtml.slice(indexHtml.indexOf('<header class="top-chrome">'), indexHtml.indexOf('<main id="appShell"'));
     const translationFormHtml = indexHtml.slice(indexHtml.indexOf('<form id="manualTranslationForm"'), indexHtml.indexOf('</form>', indexHtml.indexOf('<form id="manualTranslationForm"')) + '</form>'.length);
+    const advancedSettingsHtml = indexHtml.slice(indexHtml.indexOf('<details class="advanced-settings">'), indexHtml.indexOf('</details>', indexHtml.indexOf('<details class="advanced-settings">')) + '</details>'.length);
 
     assert.ok(indexHtml.includes('id="manualTranslationForm"'));
     assert.ok(indexHtml.includes('id="manualTranslationInput"'));
     assert.ok(indexHtml.includes('id="manualTranslationSubmit"'));
     assert.ok(indexHtml.includes('class="translation-form"'));
-    assert.ok(topChromeHtml.includes('id="autoTranslate"'));
+    assert.equal(topChromeHtml.includes('id="autoTranslate"'), false);
+    assert.ok(advancedSettingsHtml.includes('id="autoTranslate"'));
+    assert.ok(advancedSettingsHtml.includes('自动翻译'));
+    assert.ok(advancedSettingsHtml.includes('id="autoExplain"'));
+    assert.equal(indexHtml.includes('id="autoTranslate" type="checkbox" checked'), false);
+    assert.equal(indexHtml.includes('id="autoExplain" type="checkbox" checked'), false);
+    assert.ok(appJs.includes('autoTranslate: hasCurrentAutoTriggerPrefs && typeof parsed.autoTranslate === \'boolean\' ? parsed.autoTranslate : false'));
+    assert.ok(appJs.includes('autoExplain: hasCurrentAutoTriggerPrefs && typeof parsed.autoExplain === \'boolean\' ? parsed.autoExplain : false'));
+    assert.ok(appJs.includes('elements.autoTranslate.checked = state.uiPrefs.autoTranslate === true'));
+    assert.ok(appJs.includes('elements.autoExplain.checked = state.uiPrefs.autoExplain === true'));
     assert.equal(translationFormHtml.includes('id="autoTranslate"'), false);
     assert.equal(indexHtml.includes('placeholder="输入文本'), false);
     assert.equal(appJs.includes('translation-empty'), false);

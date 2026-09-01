@@ -83,6 +83,14 @@
                         <option value="box">拉框</option>
                     </select>
                 </label>
+                <label class="inline-check" title="选中文本后自动填入翻译栏并翻译">
+                    <input id="autoTranslate" type="checkbox" />
+                    <span>自动翻译</span>
+                </label>
+                <label class="inline-check" title="选中文本后自动讲解">
+                    <input id="autoExplain" type="checkbox" />
+                    <span>自动讲解</span>
+                </label>
                 <label>
                     <span>Anthropic Version</span>
                     <input id="anthropicVersion" type="text" />
@@ -144,16 +152,6 @@
         <section class="file-toolbar">
             <div class="toolbar-group file-group">
                 <button id="filePanelToggle" class="primary" type="button" aria-expanded="false" aria-controls="filePanel">文件</button>
-            </div>
-            <div class="toolbar-group ai-group">
-                <label class="inline-check" title="选中文本后自动填入翻译栏并翻译">
-                    <input id="autoTranslate" type="checkbox" checked />
-                    <span>自动译</span>
-                </label>
-                <label class="inline-check" title="选中文本后自动讲解">
-                    <input id="autoExplain" type="checkbox" checked />
-                    <span>自动讲</span>
-                </label>
             </div>
             <div id="paneRestoreBar" class="toolbar-group pane-restore-bar" hidden>
                 <button id="restoreTranslation" type="button" hidden>显示翻译</button>

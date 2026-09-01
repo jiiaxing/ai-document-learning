@@ -5,6 +5,7 @@ const ANNOTATION_STORE_KEY = 'aiPdfTutor.annotations.v1';
 const DEFAULT_SCALE = 2.32;
 const DEFAULT_SCALE_PREF_VERSION = 3;
 const DEFAULT_LAYOUT_PREF_VERSION = 2;
+const DEFAULT_AUTO_TRIGGER_PREF_VERSION = 1;
 const MIN_SCALE = 0.05;
 const MIN_INITIAL_SCALE = 0.8;
 const MAX_SCALE = 5.0;
@@ -4135,9 +4136,10 @@ function escapeAttribute(value) {
 function loadUiPrefs() {
     try {
         const parsed = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || '{}');
+        const hasCurrentAutoTriggerPrefs = Number(parsed.autoTriggerPreferenceVersion) === DEFAULT_AUTO_TRIGGER_PREF_VERSION;
         return {
-            autoTranslate: typeof parsed.autoTranslate === 'boolean' ? parsed.autoTranslate : true,
-            autoExplain: typeof parsed.autoExplain === 'boolean' ? parsed.autoExplain : true,
+            autoTranslate: hasCurrentAutoTriggerPrefs && typeof parsed.autoTranslate === 'boolean' ? parsed.autoTranslate : false,
+            autoExplain: hasCurrentAutoTriggerPrefs && typeof parsed.autoExplain === 'boolean' ? parsed.autoExplain : false,
             lineMode: false,
             eraserMode: false,
             visualSelectionStyle: parsed.visualSelectionStyle === VISUAL_SELECTION_STYLE_BOX
@@ -4166,8 +4168,8 @@ function loadUiPrefs() {
         };
     } catch {
         return {
-            autoTranslate: true,
-            autoExplain: true,
+            autoTranslate: false,
+            autoExplain: false,
             lineMode: false,
             eraserMode: false,
             visualSelectionStyle: VISUAL_SELECTION_STYLE_PATH,
@@ -4182,8 +4184,8 @@ function loadUiPrefs() {
 }
 
 function applyUiPrefs() {
-    elements.autoTranslate.checked = state.uiPrefs.autoTranslate !== false;
-    elements.autoExplain.checked = state.uiPrefs.autoExplain !== false;
+    elements.autoTranslate.checked = state.uiPrefs.autoTranslate === true;
+    elements.autoExplain.checked = state.uiPrefs.autoExplain === true;
     elements.lineMode.checked = state.uiPrefs.lineMode === true;
     elements.eraserMode.checked = state.uiPrefs.eraserMode === true;
     elements.visualSelectionStyle.value = state.uiPrefs.visualSelectionStyle === VISUAL_SELECTION_STYLE_BOX
@@ -4236,6 +4238,7 @@ function saveUiPrefs() {
         scale: state.scale,
         scalePreferenceVersion: DEFAULT_SCALE_PREF_VERSION,
         layoutPreferenceVersion: DEFAULT_LAYOUT_PREF_VERSION,
+        autoTriggerPreferenceVersion: DEFAULT_AUTO_TRIGGER_PREF_VERSION,
         translationPaneWidth: state.uiPrefs.translationPaneWidth || defaultTranslationPaneWidth(),
         assistantPaneWidth: state.uiPrefs.assistantPaneWidth || defaultAssistantPaneWidth(),
         translationPaneCollapsed: state.uiPrefs.translationPaneCollapsed === true,
