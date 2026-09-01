@@ -155,7 +155,6 @@ const elements = {
     visualActions: document.getElementById('visualActions'),
     visualExplain: document.getElementById('visualExplain'),
     visualTranslate: document.getElementById('visualTranslate'),
-    selectionPreview: document.getElementById('selectionPreview'),
     manualTranslationForm: document.getElementById('manualTranslationForm'),
     manualTranslationInput: document.getElementById('manualTranslationInput'),
     manualTranslationSubmit: document.getElementById('manualTranslationSubmit'),
@@ -1256,7 +1255,6 @@ async function probeSelection(reason) {
     if (elements.editMode.checked) {
         hideSelectionActions('edit-mode');
         if (selectedText) {
-            elements.selectionPreview.textContent = selectedText;
             logClient('annotation.selection.ready', {
                 trigger: reason,
                 page: selectionSnapshot.page,
@@ -1269,7 +1267,6 @@ async function probeSelection(reason) {
 
     if (selectionSnapshot) {
         state.lastSelection = selectedText;
-        elements.selectionPreview.textContent = selectedText;
         if (showSelectionActions(selectionSnapshot)) {
             logClient('selection.manual.ready', {
                 trigger: reason,
@@ -1301,7 +1298,6 @@ async function probeSelection(reason) {
 
     selectionGate.markTriggered(gate.normalizedText);
     state.lastSelection = gate.normalizedText;
-    elements.selectionPreview.textContent = gate.normalizedText;
     logClient('selection.trigger', {
         trigger: reason,
         page: selectionSnapshot.page,
@@ -1311,11 +1307,12 @@ async function probeSelection(reason) {
     });
 
     const source = `${state.fileName || 'PDF'} p.${selectionSnapshot.page}`;
-    const pageContext = await buildPageContext(selectionSnapshot.page);
     if (autoTranslateEnabled) {
+        fillTranslationInput(gate.normalizedText);
         void translateSelection(gate.normalizedText, source);
     }
     if (autoExplainEnabled) {
+        const pageContext = await buildPageContext(selectionSnapshot.page);
         void explainSelection(gate.normalizedText, source, pageContext);
     }
     window.getSelection()?.removeAllRanges();
@@ -1441,7 +1438,6 @@ async function explainSelectionFromAction(event) {
     }
     state.currentPage = selection.page;
     state.lastSelection = selection.text;
-    elements.selectionPreview.textContent = selection.text;
     const source = `${state.fileName || 'PDF'} p.${selection.page}`;
     hideSelectionActions('manual-explain');
     window.getSelection()?.removeAllRanges();
@@ -1464,7 +1460,7 @@ async function translateSelectionFromAction(event) {
     }
     state.currentPage = selection.page;
     state.lastSelection = selection.text;
-    elements.selectionPreview.textContent = selection.text;
+    fillTranslationInput(selection.text);
     const source = `${state.fileName || 'PDF'} p.${selection.page}`;
     hideSelectionActions('manual-translate');
     window.getSelection()?.removeAllRanges();
@@ -2690,7 +2686,6 @@ async function translateSelection(text, source, options = {}) {
     state.translationAbort = controller;
     const pageContext = options.pageContext || '';
     const images = options.images || [];
-    const userVisibleText = options.userVisibleText || text;
     elements.translationOutput.innerHTML = '';
     const node = document.createElement('div');
     node.className = 'translation-result';
@@ -2732,9 +2727,6 @@ async function translateSelection(text, source, options = {}) {
             state.translationAbort = null;
             state.activeTranslationNode = null;
         }
-        if (userVisibleText && userVisibleText !== text) {
-            elements.selectionPreview.textContent = userVisibleText;
-        }
         setBusy(false);
     }
 }
@@ -2749,7 +2741,6 @@ async function onManualTranslationSubmit(event) {
         return;
     }
 
-    elements.selectionPreview.textContent = text;
     logClient('translate.manual.submit', { textLength: text.length });
     await translateSelection(text, '手动输入');
 }
@@ -2798,11 +2789,10 @@ async function translateCurrentPage() {
             buildPageContext(pageNumber)
         ]);
         const text = pageText || '请 OCR 当前页图片并翻译整页内容。';
-        elements.selectionPreview.textContent = `翻译本页：${source}`;
+        fillTranslationInput(pageText || `翻译本页：${source}`);
         await translateSelection(text, source, {
             pageContext,
-            images: [image],
-            userVisibleText: `翻译本页：${source}`
+            images: [image]
         });
     } catch (error) {
         setTranslationError(`翻译本页失败：${messageOf(error)}`);
@@ -2868,12 +2858,11 @@ async function translateVisualSelectionFromAction(event) {
         ]);
         const label = selection.kind === 'region' ? '右键圈选区域' : '当前页';
         const source = `${state.fileName || 'PDF'} p.${pageNumber} ${label}`;
-        elements.selectionPreview.textContent = `翻译${label}：${source}`;
+        fillTranslationInput(`翻译${label}：${source}`);
         logClient('visual.selection.translate', { page: pageNumber, kind: selection.kind });
         await translateSelection(`请 OCR 并结构化翻译${label}图片内容。`, source, {
             pageContext,
-            images: [image],
-            userVisibleText: `翻译${label}：${source}`
+            images: [image]
         });
     } catch (error) {
         setTranslationError(`截图翻译失败：${messageOf(error)}`);
@@ -3309,13 +3298,14 @@ function clearConversation() {
 }
 
 function clearTranslation() {
+    fillTranslationInput('');
     elements.translationOutput.innerHTML = '';
     setTranslationEmpty();
     logClient('translation.clear');
 }
 
 function setTranslationEmpty() {
-    elements.translationOutput.innerHTML = '<div class="translation-empty">选中 PDF 文本或手动输入文本后，这里会显示翻译。</div>';
+    elements.translationOutput.innerHTML = '<div class="translation-empty">输入文本，或勾选后选中 PDF 文本，这里会显示翻译。</div>';
 }
 
 function setTranslationError(message) {
@@ -3324,6 +3314,10 @@ function setTranslationError(message) {
     node.className = 'translation-result';
     updateMarkdownNode(node, message);
     elements.translationOutput.appendChild(node);
+}
+
+function fillTranslationInput(text) {
+    elements.manualTranslationInput.value = text;
 }
 
 function updateToolbar() {

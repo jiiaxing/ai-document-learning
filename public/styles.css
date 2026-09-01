@@ -190,8 +190,7 @@ button:focus-visible {
 
 .settings-bar label > span,
 .advanced-grid label > span,
-.prompt-grid label > span,
-.selection-card > span {
+.prompt-grid label > span {
     color: var(--muted);
     font-size: 12px;
 }
@@ -464,7 +463,7 @@ button:focus-visible {
 .translation-pane {
     grid-column: 1;
     grid-row: 1;
-    grid-template-rows: 50px auto auto minmax(0, 1fr);
+    grid-template-rows: 50px auto minmax(0, 1fr);
     border-right: 1px solid var(--line);
 }
 
@@ -563,38 +562,37 @@ button:focus-visible {
     display: none;
 }
 
-.selection-card {
-    padding: 12px 14px;
-    border-bottom: 1px solid var(--line);
-    background: var(--surface-3);
-}
-
-.selection-card pre {
-    max-height: 120px;
-    overflow: auto;
-    margin: 6px 0 0;
-    color: var(--ink);
-    font-size: 13px;
-    line-height: 1.45;
-    white-space: pre-wrap;
-}
-
-.manual-translation-form {
+.translation-form {
     display: grid;
-    gap: 8px;
+    gap: 10px;
     padding: 12px 14px;
     border-bottom: 1px solid var(--line);
     background: #fff;
 }
 
-.manual-translation-form textarea {
+.translation-form textarea {
     width: 100%;
-    min-height: 78px;
+    min-height: 150px;
+    max-height: 34vh;
+    line-height: 1.5;
     resize: vertical;
 }
 
-.manual-translation-form button {
-    justify-self: end;
+.translation-form-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.translation-form-actions .inline-check {
+    min-width: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.translation-form-actions button {
+    flex: 0 0 auto;
 }
 
 .translation-output,

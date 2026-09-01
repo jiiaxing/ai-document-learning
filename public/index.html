@@ -141,10 +141,6 @@
             <button id="explainPage" type="button" title="讲解本页">讲解页</button>
             <button id="translatePage" type="button" title="翻译本页">翻译页</button>
             <label class="inline-check">
-                <input id="autoTranslate" type="checkbox" checked />
-                <span>自动译</span>
-            </label>
-            <label class="inline-check">
                 <input id="autoExplain" type="checkbox" checked />
                 <span>自动讲</span>
             </label>
@@ -190,13 +186,15 @@
                     <button id="clearTranslation" type="button">清空</button>
                 </div>
             </div>
-            <div class="selection-card">
-                <span>当前选区</span>
-                <pre id="selectionPreview">尚未选择文本</pre>
-            </div>
-            <form id="manualTranslationForm" class="manual-translation-form">
-                <textarea id="manualTranslationInput" rows="4" placeholder="输入文本手动翻译"></textarea>
-                <button id="manualTranslationSubmit" class="primary" type="submit">翻译</button>
+            <form id="manualTranslationForm" class="translation-form">
+                <textarea id="manualTranslationInput" rows="6" placeholder="输入文本，或选中 PDF 文本"></textarea>
+                <div class="translation-form-actions">
+                    <label class="inline-check">
+                        <input id="autoTranslate" type="checkbox" checked />
+                        <span>选中后自动翻译</span>
+                    </label>
+                    <button id="manualTranslationSubmit" class="primary" type="submit">翻译</button>
+                </div>
             </form>
             <div id="translationOutput" class="translation-output"></div>
         </aside>

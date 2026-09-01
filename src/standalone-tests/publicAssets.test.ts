@@ -175,8 +175,15 @@ test('front-end supports manual text translation without PDF selection', () => {
     assert.ok(indexHtml.includes('id="manualTranslationForm"'));
     assert.ok(indexHtml.includes('id="manualTranslationInput"'));
     assert.ok(indexHtml.includes('id="manualTranslationSubmit"'));
+    assert.ok(indexHtml.includes('class="translation-form"'));
+    assert.ok(indexHtml.includes('选中后自动翻译'));
+    assert.equal(indexHtml.includes('id="selectionPreview"'), false);
+    assert.equal(indexHtml.includes('当前选区'), false);
     assert.ok(appJs.includes('manualTranslationInput: document.getElementById'));
     assert.ok(appJs.includes('onManualTranslationSubmit'));
+    assert.ok(appJs.includes('function fillTranslationInput'));
+    assert.ok(appJs.includes('fillTranslationInput(gate.normalizedText)'));
+    assert.equal(appJs.includes('selectionPreview'), false);
     assert.ok(appJs.includes("translateSelection(text, '手动输入')"));
     assert.ok(appJs.includes("logClient('translate.manual.submit'"));
 });
