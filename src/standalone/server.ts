@@ -80,6 +80,12 @@ export function createAppServer(config: AppConfig, logger: DeveloperLogger): Ser
                 return;
             }
 
+            const readingFileId = readingFileIdFromApiPath(url.pathname);
+            if (readingFileId && req.method === 'DELETE') {
+                sendJson(res, { file: readingLibrary.delete(readingFileId) });
+                return;
+            }
+
             const readingFileNotesId = readingFileIdFromNotesPath(url.pathname);
             if (readingFileNotesId && req.method === 'GET') {
                 sendJson(res, { notes: readingLibrary.loadNotes(readingFileNotesId) });
@@ -199,10 +205,11 @@ function serveWorkspacePdf(urlPath: string, workspaceDir: string, res: ServerRes
 }
 
 function serveReadingFilePdf(library: ReadingLibrary, id: string, res: ServerResponse): void {
+    const filePath = library.pdfPathFor(id);
     res.writeHead(200, {
         'Content-Type': 'application/pdf'
     });
-    library.createPdfStream(id).pipe(res);
+    createReadStream(filePath).pipe(res);
 }
 
 function readingFileIdFromSourcePath(pathname: string): string | null {
@@ -212,6 +219,11 @@ function readingFileIdFromSourcePath(pathname: string): string | null {
 
 function readingFileIdFromNotesPath(pathname: string): string | null {
     const match = pathname.match(/^\/api\/reading-files\/([^/]+)\/notes$/);
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
+function readingFileIdFromApiPath(pathname: string): string | null {
+    const match = pathname.match(/^\/api\/reading-files\/([^/]+)$/);
     return match ? decodeURIComponent(match[1]) : null;
 }
 

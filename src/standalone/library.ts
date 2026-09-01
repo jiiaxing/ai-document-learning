@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DeveloperLogger } from './logger';
@@ -129,6 +129,20 @@ export class ReadingLibrary {
         writeFileSync(join(this.documentsDir, id, 'meta.json'), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
         this.writeIndex(index);
         this.logger.debug('reading_file.notes.saved', { id, title: record.title });
+        return toSummary(record);
+    }
+
+    delete(id: string): ReadingFileSummary {
+        const index = this.readIndex();
+        const recordIndex = index.documents.findIndex((entry) => entry.id === id);
+        if (recordIndex === -1) {
+            throw new ReadingLibraryError('Reading file not found.', 404);
+        }
+
+        const [record] = index.documents.splice(recordIndex, 1);
+        this.writeIndex(index);
+        rmSync(this.resolveLibraryPath(join('documents', id)), { recursive: true, force: true });
+        this.logger.info('reading_file.deleted', { id, title: record.title });
         return toSummary(record);
     }
 

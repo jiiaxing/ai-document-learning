@@ -377,6 +377,21 @@ test('reading file library imports PDFs and persists annotation notes', async ()
         assert.equal(existsSync(join(documentDir, 'notes.json')), true);
         assert.match(readFileSync(join(libraryDir, 'library.json'), 'utf8'), /unit lecture\.pdf/);
         assert.match(readFileSync(join(documentDir, 'notes.json'), 'utf8'), /Operating systems/);
+
+        const deleteResponse = await fetch(`${baseUrl}/api/reading-files/${imported.file.id}`, {
+            method: 'DELETE'
+        });
+        assert.equal(deleteResponse.status, 200);
+        assert.equal(existsSync(documentDir), false);
+
+        const emptyAfterDelete = await fetch(`${baseUrl}/api/reading-files`);
+        assert.deepEqual(await emptyAfterDelete.json(), { files: [] });
+        assert.doesNotMatch(readFileSync(join(libraryDir, 'library.json'), 'utf8'), /unit lecture\.pdf/);
+
+        const missingPdfResponse = await fetch(`${baseUrl}/reading-files/${imported.file.id}/source.pdf`);
+        assert.equal(missingPdfResponse.status, 404);
+        const missingNotesResponse = await fetch(`${baseUrl}/api/reading-files/${imported.file.id}/notes`);
+        assert.equal(missingNotesResponse.status, 404);
     } finally {
         await closeServer(server);
         rmSync(tempDir, { recursive: true, force: true });
