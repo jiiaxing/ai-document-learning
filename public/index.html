@@ -125,50 +125,56 @@
         </details>
     </form>
 
-    <section class="file-toolbar">
-        <div class="toolbar-group file-group">
-            <button id="openPdf" class="primary" type="button">打开 PDF</button>
-            <input id="pdfInput" type="file" accept="application/pdf,.pdf" hidden />
-        </div>
-        <div class="toolbar-group ai-group">
-            <button id="explainPage" type="button" title="讲解本页">讲解页</button>
-            <button id="translatePage" type="button" title="翻译本页">翻译页</button>
+    <header class="top-chrome">
+        <section class="file-toolbar">
+            <div class="toolbar-group file-group">
+                <button id="openPdf" class="primary" type="button">打开 PDF</button>
+                <input id="pdfInput" type="file" accept="application/pdf,.pdf" hidden />
+            </div>
+            <div class="toolbar-group ai-group">
+                <label class="inline-check" title="选中文本后自动填入翻译栏并翻译">
+                    <input id="autoTranslate" type="checkbox" checked />
+                    <span>自动译</span>
+                </label>
+                <label class="inline-check" title="选中文本后自动讲解">
+                    <input id="autoExplain" type="checkbox" checked />
+                    <span>自动讲</span>
+                </label>
+            </div>
+            <div id="paneRestoreBar" class="toolbar-group pane-restore-bar" hidden>
+                <button id="restoreTranslation" type="button" hidden>显示翻译</button>
+                <button id="restoreAssistant" type="button" hidden>显示讲解</button>
+            </div>
+            <div class="toolbar-group annotation-group">
+                <button id="annotationToggle" type="button" aria-expanded="false" aria-controls="annotationRibbon">批注工具</button>
+            </div>
+            <div class="toolbar-group settings-group">
+                <button id="settingsToggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="settingsForm">设置</button>
+            </div>
+        </section>
+        <section id="annotationRibbon" class="annotation-ribbon" aria-label="批注工具" hidden>
             <label class="inline-check">
-                <input id="autoExplain" type="checkbox" checked />
-                <span>自动讲</span>
+                <input id="editMode" type="checkbox" />
+                <span>批注</span>
             </label>
-        </div>
-        <div class="toolbar-group annotation-group">
-            <details class="toolbar-menu annotation-menu">
-                <summary>批注工具</summary>
-                <div class="annotation-popover">
-                    <label class="inline-check">
-                        <input id="editMode" type="checkbox" />
-                        <span>批注</span>
-                    </label>
-                    <button id="addHighlight" type="button">高亮</button>
-                    <button id="undoHighlight" type="button">撤销</button>
-                    <button id="addNote" type="button">笔记</button>
-                    <button id="noteFontDown" type="button" aria-label="减小笔记字号">A−</button>
-                    <span id="noteFontInfo" class="page-info">字号</span>
-                    <button id="noteFontUp" type="button" aria-label="增大笔记字号">A+</button>
-                    <button id="deleteNote" type="button">删除</button>
-                    <label class="inline-check">
-                        <input id="lineMode" type="checkbox" />
-                        <span>线条</span>
-                    </label>
-                    <label class="inline-check">
-                        <input id="eraserMode" type="checkbox" />
-                        <span>橡皮</span>
-                    </label>
-                    <button id="clearPageAnnotations" type="button">清本页</button>
-                </div>
-            </details>
-        </div>
-        <div class="toolbar-group settings-group">
-            <button id="settingsToggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="settingsForm">设置</button>
-        </div>
-    </section>
+            <button id="addHighlight" type="button">高亮</button>
+            <button id="undoHighlight" type="button">撤销</button>
+            <button id="addNote" type="button">笔记</button>
+            <button id="noteFontDown" type="button" aria-label="减小笔记字号">A−</button>
+            <span id="noteFontInfo" class="page-info">字号</span>
+            <button id="noteFontUp" type="button" aria-label="增大笔记字号">A+</button>
+            <button id="deleteNote" type="button">删除</button>
+            <label class="inline-check">
+                <input id="lineMode" type="checkbox" />
+                <span>线条</span>
+            </label>
+            <label class="inline-check">
+                <input id="eraserMode" type="checkbox" />
+                <span>橡皮</span>
+            </label>
+            <button id="clearPageAnnotations" type="button">清本页</button>
+        </section>
+    </header>
 
     <main id="appShell" class="app-shell">
         <aside id="translationPane" class="translation-pane">
@@ -182,10 +188,6 @@
             <form id="manualTranslationForm" class="translation-form">
                 <textarea id="manualTranslationInput" rows="6"></textarea>
                 <div class="translation-form-actions">
-                    <label class="inline-check">
-                        <input id="autoTranslate" type="checkbox" checked />
-                        <span>选中后自动翻译</span>
-                    </label>
                     <button id="manualTranslationSubmit" class="primary" type="submit">翻译</button>
                 </div>
             </form>
@@ -247,10 +249,6 @@
                 <input id="imageInput" type="file" accept="image/*" multiple hidden>
             </form>
         </aside>
-        <div id="paneRestoreBar" class="pane-restore-bar">
-            <button id="restoreTranslation" type="button" hidden>显示翻译</button>
-            <button id="restoreAssistant" type="button" hidden>显示讲解</button>
-        </div>
     </main>
 
     <script type="module" src="/app.js"></script>

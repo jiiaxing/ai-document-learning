@@ -23,6 +23,11 @@ test('front-end script remains syntactically valid JavaScript', () => {
     assert.doesNotThrow(() => new Function(appJs.replace('await boot();', '')));
 });
 
+test('front-end stylesheet keeps rule braces balanced', () => {
+    assert.equal(stylesCss.match(/\{/g)?.length || 0, stylesCss.match(/\}/g)?.length || 0);
+    assert.match(stylesCss, /\.annotation-ribbon \.inline-check \{[\s\S]*?background: var\(--surface-3\);\s*\}\s*\.annotation-ribbon \.page-info/);
+});
+
 test('front-end auto explain only probes selection after mouse release', () => {
     assert.ok(appJs.includes("document.addEventListener('mouseup'"));
     assert.ok(appJs.includes("document.addEventListener('pointerup', onDocumentSelectionPointerUp"));
@@ -53,7 +58,8 @@ test('front-end exposes prompt template settings', () => {
 test('front-end keeps provider settings in a drawer instead of the primary reader chrome', () => {
     const settingsHtml = indexHtml.slice(indexHtml.indexOf('<form id="settingsForm"'), indexHtml.indexOf('</form>') + '</form>'.length);
     const advancedSettingsHtml = indexHtml.slice(indexHtml.indexOf('<details class="advanced-settings">'), indexHtml.indexOf('</details>', indexHtml.indexOf('<details class="advanced-settings">')) + '</details>'.length);
-    const assistantPaneHtml = indexHtml.slice(indexHtml.indexOf('<aside id="assistantPane"'), indexHtml.indexOf('<div id="paneRestoreBar"'));
+    const assistantPaneStart = indexHtml.indexOf('<aside id="assistantPane"');
+    const assistantPaneHtml = indexHtml.slice(assistantPaneStart, indexHtml.indexOf('</aside>', assistantPaneStart) + '</aside>'.length);
 
     assert.ok(indexHtml.includes('id="settingsToggle"'));
     assert.ok(indexHtml.includes('id="settingsBackdrop"'));
@@ -191,7 +197,23 @@ test('front-end supports selectable continuous PDF reading', () => {
 });
 
 test('front-end exposes local PDF annotation tools', () => {
+    const topChromeHtml = indexHtml.slice(indexHtml.indexOf('<header class="top-chrome">'), indexHtml.indexOf('<main id="appShell"'));
+    const annotationRibbonHtml = indexHtml.slice(indexHtml.indexOf('<section id="annotationRibbon"'), indexHtml.indexOf('</section>', indexHtml.indexOf('<section id="annotationRibbon"')) + '</section>'.length);
+    const annotationRibbonCss = stylesCss.match(/\.annotation-ribbon \{[\s\S]*?\}/)?.[0] || '';
+
     assert.ok(appJs.includes("const ANNOTATION_STORE_KEY = 'aiPdfTutor.annotations.v1'"));
+    assert.ok(topChromeHtml.includes('id="annotationToggle"'));
+    assert.ok(topChromeHtml.includes('aria-controls="annotationRibbon"'));
+    assert.ok(annotationRibbonHtml.includes('id="editMode"'));
+    assert.ok(annotationRibbonHtml.includes('id="addHighlight"'));
+    assert.ok(annotationRibbonHtml.includes('id="clearPageAnnotations"'));
+    assert.equal(indexHtml.includes('annotation-popover'), false);
+    assert.equal(indexHtml.includes('toolbar-menu'), false);
+    assert.ok(appJs.includes("elements.annotationToggle.addEventListener('click', toggleAnnotationRibbon)"));
+    assert.ok(appJs.includes('function setAnnotationRibbonOpen'));
+    assert.ok(annotationRibbonCss.includes('display: flex'));
+    assert.ok(annotationRibbonCss.includes('border-bottom: 1px solid var(--line)'));
+    assert.ok(annotationRibbonCss.includes('overflow-x: auto'));
     assert.ok(appJs.includes('addHighlightFromSelection'));
     assert.ok(indexHtml.includes('id="undoHighlight"'));
     assert.ok(appJs.includes('undoLastHighlight'));
@@ -202,11 +224,15 @@ test('front-end exposes local PDF annotation tools', () => {
 });
 
 test('front-end supports manual text translation without PDF selection', () => {
+    const topChromeHtml = indexHtml.slice(indexHtml.indexOf('<header class="top-chrome">'), indexHtml.indexOf('<main id="appShell"'));
+    const translationFormHtml = indexHtml.slice(indexHtml.indexOf('<form id="manualTranslationForm"'), indexHtml.indexOf('</form>', indexHtml.indexOf('<form id="manualTranslationForm"')) + '</form>'.length);
+
     assert.ok(indexHtml.includes('id="manualTranslationForm"'));
     assert.ok(indexHtml.includes('id="manualTranslationInput"'));
     assert.ok(indexHtml.includes('id="manualTranslationSubmit"'));
     assert.ok(indexHtml.includes('class="translation-form"'));
-    assert.ok(indexHtml.includes('选中后自动翻译'));
+    assert.ok(topChromeHtml.includes('id="autoTranslate"'));
+    assert.equal(translationFormHtml.includes('id="autoTranslate"'), false);
     assert.equal(indexHtml.includes('placeholder="输入文本'), false);
     assert.equal(appJs.includes('translation-empty'), false);
     assert.equal(appJs.includes('这里会显示翻译'), false);
@@ -240,6 +266,10 @@ test('front-end shows only manual selection actions whose auto trigger is off', 
 });
 
 test('front-end supports resizable and collapsible side panes', () => {
+    const topChromeHtml = indexHtml.slice(indexHtml.indexOf('<header class="top-chrome">'), indexHtml.indexOf('<main id="appShell"'));
+    const appShellHtml = indexHtml.slice(indexHtml.indexOf('<main id="appShell"'));
+    const paneRestoreCss = stylesCss.match(/\.pane-restore-bar \{[\s\S]*?\}/)?.[0] || '';
+
     assert.ok(indexHtml.includes('id="appShell"'));
     assert.ok(indexHtml.includes('id="leftPaneResizer"'));
     assert.ok(indexHtml.includes('id="rightPaneResizer"'));
@@ -247,6 +277,12 @@ test('front-end supports resizable and collapsible side panes', () => {
     assert.ok(indexHtml.includes('id="collapseAssistant"'));
     assert.ok(indexHtml.includes('id="restoreTranslation"'));
     assert.ok(indexHtml.includes('id="restoreAssistant"'));
+    assert.ok(topChromeHtml.includes('id="paneRestoreBar"'));
+    assert.ok(topChromeHtml.includes('id="restoreTranslation"'));
+    assert.ok(topChromeHtml.includes('id="restoreAssistant"'));
+    assert.equal(appShellHtml.includes('id="paneRestoreBar"'), false);
+    assert.equal(paneRestoreCss.includes('position:'), false);
+    assert.equal(paneRestoreCss.includes('right:'), false);
     assert.ok(appJs.includes('function startPaneResize'));
     assert.ok(appJs.includes('function setPaneCollapsed'));
     assert.ok(appJs.includes('translationPaneWidth'));
@@ -324,14 +360,21 @@ test('front-end keeps empty reader and text inputs visually quiet', () => {
 });
 
 test('front-end supports page image actions and right-click visual selection', () => {
-    assert.ok(indexHtml.includes('id="explainPage"'));
-    assert.ok(indexHtml.includes('id="translatePage"'));
+    const topChromeHtml = indexHtml.slice(indexHtml.indexOf('<header class="top-chrome">'), indexHtml.indexOf('<main id="appShell"'));
+
+    assert.equal(indexHtml.includes('id="explainPage"'), false);
+    assert.equal(indexHtml.includes('id="translatePage"'), false);
+    assert.equal(topChromeHtml.includes('讲解页'), false);
+    assert.equal(topChromeHtml.includes('翻译页'), false);
     assert.ok(indexHtml.includes('id="visualActions"'));
     assert.ok(indexHtml.includes('id="visualExplain"'));
     assert.ok(indexHtml.includes('id="visualTranslate"'));
     assert.ok(indexHtml.includes('id="visualSelectionStyle"'));
     assert.ok(appJs.includes('PAGE_IMAGE_MAX_EDGE'));
-    assert.ok(appJs.includes("elements.explainPage.addEventListener('click'"));
+    assert.equal(appJs.includes('explainPage: document.getElementById'), false);
+    assert.equal(appJs.includes('translatePage: document.getElementById'), false);
+    assert.equal(appJs.includes("elements.explainPage.addEventListener('click'"), false);
+    assert.equal(appJs.includes("elements.translatePage.addEventListener('click'"), false);
     assert.ok(appJs.includes("elements.viewer.addEventListener('contextmenu', onViewerContextMenu)"));
     assert.ok(appJs.includes('function capturePageImage'));
     assert.equal(appJs.includes('function drawVisualSelectionPath'), false);

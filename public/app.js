@@ -119,10 +119,10 @@ const elements = {
     settingsStatus: document.getElementById('settingsStatus'),
     openPdf: document.getElementById('openPdf'),
     pdfInput: document.getElementById('pdfInput'),
+    annotationToggle: document.getElementById('annotationToggle'),
+    annotationRibbon: document.getElementById('annotationRibbon'),
     prevPage: document.getElementById('prevPage'),
     nextPage: document.getElementById('nextPage'),
-    explainPage: document.getElementById('explainPage'),
-    translatePage: document.getElementById('translatePage'),
     pageJumpInput: document.getElementById('pageJumpInput'),
     pageSlider: document.getElementById('pageSlider'),
     readerMode: document.getElementById('readerMode'),
@@ -241,10 +241,9 @@ function wireEvents() {
     elements.protocol.addEventListener('change', updateProviderFields);
     elements.openPdf.addEventListener('click', () => elements.pdfInput.click());
     elements.pdfInput.addEventListener('change', onPdfPicked);
+    elements.annotationToggle.addEventListener('click', toggleAnnotationRibbon);
     elements.prevPage.addEventListener('click', () => gotoPage(state.currentPage - 1));
     elements.nextPage.addEventListener('click', () => gotoPage(state.currentPage + 1));
-    elements.explainPage.addEventListener('click', () => void explainCurrentPage());
-    elements.translatePage.addEventListener('click', () => void translateCurrentPage());
     elements.pageJumpInput.addEventListener('input', onPageJumpInput);
     elements.pageJumpInput.addEventListener('keydown', onPageJumpKeydown);
     elements.pageSlider.addEventListener('input', onPageSliderInput);
@@ -318,6 +317,16 @@ function focusViewerUnlessInteractive(event) {
 function isInteractiveTarget(target) {
     return target instanceof HTMLElement
         && Boolean(target.closest('button, input, textarea, select, [contenteditable="true"], .annotation-note-box'));
+}
+
+function toggleAnnotationRibbon() {
+    setAnnotationRibbonOpen(elements.annotationRibbon.hidden);
+}
+
+function setAnnotationRibbonOpen(open) {
+    elements.annotationRibbon.hidden = !open;
+    elements.annotationToggle.setAttribute('aria-expanded', String(open));
+    elements.annotationToggle.classList.toggle('active-tool', open);
 }
 
 function setPaneCollapsed(pane, collapsed) {
@@ -3318,8 +3327,6 @@ function updateToolbar() {
     elements.pageSlider.value = pages ? String(state.currentPage) : '1';
     elements.prevPage.disabled = !pages || state.currentPage <= 1;
     elements.nextPage.disabled = !pages || state.currentPage >= pages;
-    elements.explainPage.disabled = !pages;
-    elements.translatePage.disabled = !pages;
     updateAnnotationControls();
 }
 

@@ -269,6 +269,11 @@ button:focus-visible {
     line-height: 1.45;
 }
 
+.top-chrome {
+    min-width: 0;
+    background: var(--surface-3);
+}
+
 .file-toolbar {
     min-height: 46px;
     display: flex;
@@ -314,49 +319,39 @@ button:focus-visible {
     padding-right: 10px;
 }
 
-.toolbar-menu {
-    position: relative;
-}
-
-.toolbar-menu summary {
+.annotation-ribbon {
     display: flex;
     align-items: center;
-    height: 32px;
-    padding: 0 11px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    background: var(--surface);
-    cursor: pointer;
-    user-select: none;
+    gap: 8px;
+    min-height: 44px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.96);
+    overflow-x: auto;
+    scrollbar-gutter: stable;
+    scrollbar-color: rgba(100, 113, 132, 0.42) transparent;
+    scrollbar-width: thin;
 }
 
-.toolbar-menu summary::-webkit-details-marker {
+.annotation-ribbon[hidden] {
     display: none;
 }
 
-.toolbar-menu[open] summary {
-    border-color: var(--accent);
-    background: rgba(37, 99, 235, 0.08);
-    color: #1d4ed8;
+.annotation-ribbon::-webkit-scrollbar {
+    height: 8px;
 }
 
-.annotation-popover {
-    position: fixed;
-    top: 118px;
-    right: 16px;
-    z-index: 60;
-    display: grid;
-    grid-template-columns: repeat(4, max-content);
-    gap: 8px;
-    max-width: min(92vw, 560px);
-    padding: 10px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.98);
-    box-shadow: var(--shadow);
+.annotation-ribbon::-webkit-scrollbar-track {
+    background: transparent;
 }
 
-.annotation-popover .inline-check {
+.annotation-ribbon::-webkit-scrollbar-thumb {
+    border: 2px solid #fff;
+    border-radius: 999px;
+    background: rgba(100, 113, 132, 0.42);
+}
+
+.annotation-ribbon .inline-check {
     min-height: 32px;
     padding: 0 8px;
     border: 1px solid var(--line);
@@ -364,18 +359,21 @@ button:focus-visible {
     background: var(--surface-3);
 }
 
-.annotation-popover .page-info {
+.annotation-ribbon .page-info {
     align-self: center;
     min-width: 48px;
 }
 
 .file-toolbar button,
 .file-toolbar select,
-.file-toolbar input {
+.file-toolbar input,
+.annotation-ribbon button,
+.annotation-ribbon input {
     height: 32px;
 }
 
-.file-toolbar button {
+.file-toolbar button,
+.annotation-ribbon button {
     padding: 0 8px;
 }
 
@@ -543,12 +541,8 @@ button:focus-visible {
 }
 
 .pane-restore-bar {
-    position: absolute;
-    top: 10px;
-    right: 14px;
-    z-index: 25;
     display: flex;
-    gap: 8px;
+    gap: 5px;
 }
 
 .pane-restore-bar[hidden] {
@@ -574,14 +568,8 @@ button:focus-visible {
 .translation-form-actions {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 10px;
-}
-
-.translation-form-actions .inline-check {
-    min-width: 0;
-    color: var(--muted);
-    font-size: 13px;
 }
 
 .translation-form-actions button {
@@ -1243,15 +1231,6 @@ button:focus-visible {
 
     .pane-resizer {
         display: none;
-    }
-
-    .pane-restore-bar {
-        position: sticky;
-        top: 0;
-        right: auto;
-        padding: 8px 12px;
-        background: var(--surface-3);
-        border-bottom: 1px solid var(--line);
     }
 
     .translation-pane,
