@@ -141,8 +141,8 @@ button:focus-visible {
     top: 0;
     right: 0;
     z-index: 80;
-    display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     width: clamp(420px, 38vw, 620px);
     max-width: 100vw;
     height: 100vh;
@@ -599,10 +599,6 @@ button:focus-visible {
 
 .translation-output {
     line-height: 1.55;
-}
-
-.translation-empty {
-    color: var(--muted);
 }
 
 .translation-result {
@@ -1208,7 +1204,7 @@ button:focus-visible {
 }
 
 .log-panel pre {
-    max-height: 220px;
+    max-height: 180px;
     overflow: auto;
     margin: 0;
     padding: 0 12px 12px;

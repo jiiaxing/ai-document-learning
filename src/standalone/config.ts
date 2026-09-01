@@ -83,7 +83,7 @@ const providerPresetDefaults: Record<Exclude<ProviderPreset, 'custom' | 'mock'>,
     deepseek: {
         protocol: 'openai',
         endpoint: 'https://api.deepseek.com/chat/completions',
-        model: 'deepseek-v4-pro'
+        model: 'deepseek-v4-flash-vision-exp'
     }
 };
 
@@ -100,7 +100,7 @@ export function loadConfig(cwd = process.cwd(), env = process.env): AppConfig {
         ?? env.AI_TUTOR_PROVIDER
         ?? fileConfig.provider?.preset
         ?? fileConfig.provider?.kind
-        ?? '';
+        ?? 'deepseek';
     const preset = resolveProviderPreset(rawPresetValue, env.AI_TUTOR_ENDPOINT ?? fileConfig.provider?.endpoint ?? '', apiKey);
     const presetDefaults = providerDefaultsForPreset(preset);
     const envPresetOverride = Boolean(
@@ -135,7 +135,7 @@ export function loadConfig(cwd = process.cwd(), env = process.env): AppConfig {
             kind: providerKind,
             protocol,
             endpoint: normalizeEndpoint(protocol, env.AI_TUTOR_ENDPOINT ?? (envPresetOverride ? presetDefaults?.endpoint : undefined) ?? fileConfig.provider?.endpoint ?? presetDefaults?.endpoint ?? 'https://api.openai.com/v1/chat/completions'),
-            model: stringValue(env.AI_TUTOR_MODEL ?? (envPresetOverride ? presetDefaults?.model : undefined) ?? fileConfig.provider?.model ?? presetDefaults?.model ?? 'gpt-4o-mini'),
+            model: stringValue(env.AI_TUTOR_MODEL ?? (envPresetOverride ? presetDefaults?.model : undefined) ?? fileConfig.provider?.model ?? presetDefaults?.model ?? providerPresetDefaults.deepseek.model),
             apiKey,
             apiKeyHeader: stringValue(env.AI_TUTOR_API_KEY_HEADER ?? fileConfig.provider?.apiKeyHeader ?? 'Authorization'),
             apiKeyPrefix: normalizeApiKeyPrefix(env.AI_TUTOR_API_KEY_PREFIX ?? fileConfig.provider?.apiKeyPrefix ?? 'Bearer '),

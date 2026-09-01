@@ -102,7 +102,7 @@ For desktop builds, runtime configuration and logs are stored in the Electron us
 C:\Users\<user>\AppData\Roaming\AI PDF Tutor\
 ```
 
-The settings drawer includes presets for Mock, OpenAI / GPT, DeepSeek, and custom OpenAI-compatible endpoints.
+The default provider preset is DeepSeek. The settings drawer also includes Mock, OpenAI / GPT, and custom OpenAI-compatible endpoints.
 
 Example OpenAI provider:
 
@@ -130,7 +130,7 @@ Example DeepSeek provider:
     "kind": "openaiCompatible",
     "protocol": "openai",
     "endpoint": "https://api.deepseek.com/chat/completions",
-    "model": "deepseek-v4-pro",
+    "model": "deepseek-v4-flash-vision-exp",
     "apiKey": "YOUR_DEEPSEEK_API_KEY",
     "apiKeyHeader": "Authorization",
     "apiKeyPrefix": "Bearer "

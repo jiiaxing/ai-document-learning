@@ -39,7 +39,7 @@ const PROVIDER_PRESETS = {
     deepseek: {
         protocol: 'openai',
         endpoint: 'https://api.deepseek.com/chat/completions',
-        model: 'deepseek-v4-pro',
+        model: 'deepseek-v4-flash-vision-exp',
         responseTextPath: 'choices.0.message.content'
     }
 };
@@ -528,7 +528,7 @@ async function saveSettings(event) {
         }
         state.settings = await response.json();
         applySettingsToForm(state.settings);
-        elements.settingsStatus.textContent = state.settings.provider.apiKeyConfigured ? '已保存，key 已配置' : '已保存，当前为 mock/无 key';
+        elements.settingsStatus.textContent = '已保存';
         logClient('settings.saved', publicSettingsLog(state.settings));
     } catch (error) {
         elements.settingsStatus.textContent = `保存失败：${messageOf(error)}`;
@@ -543,7 +543,7 @@ function applySettingsToForm(settings) {
     elements.model.value = settings.provider.model;
     elements.apiKey.value = '';
     state.apiKeyTouched = false;
-    elements.apiKey.placeholder = settings.provider.apiKeyConfigured ? '已保存，留空则保留' : '输入 API Key';
+    elements.apiKey.placeholder = '';
     elements.clearApiKey.checked = false;
     elements.apiKeyHeader.value = settings.provider.apiKeyHeader;
     elements.apiKeyPrefix.value = settings.provider.apiKeyPrefix;
@@ -557,7 +557,7 @@ function applySettingsToForm(settings) {
     elements.explainPromptTemplate.value = settings.explainPromptTemplate;
     elements.translatePromptTemplate.value = settings.translatePromptTemplate;
     elements.followupPromptTemplate.value = settings.followupPromptTemplate;
-    elements.settingsStatus.textContent = settings.provider.apiKeyConfigured ? '已从本机加载设置，key 已配置' : '已从本机加载设置，当前无 key';
+    elements.settingsStatus.textContent = '';
     updateProviderFields();
 }
 
@@ -621,27 +621,27 @@ function updateApiKeyState() {
     const hasSavedKey = Boolean(state.settings?.provider?.apiKeyConfigured);
 
     if (preset === 'mock') {
-        setApiKeyState('Mock 模式不需要 key', 'muted');
+        setApiKeyState('Mock', 'muted');
         return;
     }
     if (elements.clearApiKey.checked) {
-        setApiKeyState('保存后会清除已保存 key', 'warning');
+        setApiKeyState('将清除 Key', 'warning');
         return;
     }
     if (state.apiKeyTouched && elements.apiKey.value.trim()) {
-        setApiKeyState('保存后使用本次输入的 key', 'ready');
+        setApiKeyState('待保存', 'ready');
         return;
     }
     if (hasSavedKey && savedPreset === preset) {
-        setApiKeyState('已保存 key，留空保存仍会使用', 'ready');
+        setApiKeyState('已配置 Key', 'ready');
         return;
     }
     if (hasSavedKey && savedPreset !== preset) {
-        setApiKeyState('切换服务商后需要输入对应 key', 'warning');
+        setApiKeyState('需重新配置 Key', 'warning');
         return;
     }
 
-    setApiKeyState('未保存 key，请输入后保存', 'warning');
+    setApiKeyState('未配置 Key', 'warning');
 }
 
 function setApiKeyState(message, tone) {
@@ -2262,7 +2262,7 @@ function renderNoteBox(layer, annotation) {
     const input = document.createElement('textarea');
     input.className = 'annotation-note-input';
     input.spellcheck = false;
-    input.placeholder = '在此处开始键入...';
+    input.placeholder = '';
     input.value = annotation.note || '';
     input.addEventListener('pointerdown', (event) => {
         event.stopPropagation();
@@ -3292,7 +3292,7 @@ function clearTranslation() {
 }
 
 function setTranslationEmpty() {
-    elements.translationOutput.innerHTML = '<div class="translation-empty">输入文本，或勾选后选中 PDF 文本，这里会显示翻译。</div>';
+    elements.translationOutput.innerHTML = '';
 }
 
 function setTranslationError(message) {

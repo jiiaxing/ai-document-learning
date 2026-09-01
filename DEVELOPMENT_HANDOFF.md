@@ -165,12 +165,12 @@ Smoke test packaged app:
 
 ## API Notes
 
-Current observed desktop config uses:
+Fresh installs now default to the DeepSeek vision preset:
 
 - provider kind: `openaiCompatible`
 - protocol: `openai`
-- endpoint: `https://api.silasvance.com/v1/chat/completions`
-- model in desktop config recently observed: `gpt-5.4`
+- endpoint: `https://api.deepseek.com/chat/completions`
+- model: `deepseek-v4-flash-vision-exp`
 
 If the app shows:
 

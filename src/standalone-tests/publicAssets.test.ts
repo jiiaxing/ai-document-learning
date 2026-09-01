@@ -36,9 +36,11 @@ test('front-end only submits API keys typed in the current session', () => {
     assert.ok(indexHtml.includes('id="apiKeyState"'));
     assert.ok(appJs.includes("elements.apiKey.addEventListener('input'"));
     assert.ok(appJs.includes('function updateApiKeyState'));
-    assert.ok(appJs.includes('切换服务商后需要输入对应 key'));
+    assert.ok(appJs.includes('需重新配置 Key'));
     assert.ok(appJs.includes('state.apiKeyTouched && elements.providerKind.value !=='));
     assert.ok(appJs.includes('state.apiKeyTouched = false'));
+    assert.equal(indexHtml.includes('留空则保留'), false);
+    assert.equal(appJs.includes('留空则保留'), false);
 });
 
 test('front-end exposes prompt template settings', () => {
@@ -50,6 +52,7 @@ test('front-end exposes prompt template settings', () => {
 
 test('front-end keeps provider settings in a drawer instead of the primary reader chrome', () => {
     const settingsHtml = indexHtml.slice(indexHtml.indexOf('<form id="settingsForm"'), indexHtml.indexOf('</form>') + '</form>'.length);
+    const advancedSettingsHtml = indexHtml.slice(indexHtml.indexOf('<details class="advanced-settings">'), indexHtml.indexOf('</details>', indexHtml.indexOf('<details class="advanced-settings">')) + '</details>'.length);
     const assistantPaneHtml = indexHtml.slice(indexHtml.indexOf('<aside id="assistantPane"'), indexHtml.indexOf('<div id="paneRestoreBar"'));
 
     assert.ok(indexHtml.includes('id="settingsToggle"'));
@@ -57,6 +60,7 @@ test('front-end keeps provider settings in a drawer instead of the primary reade
     assert.ok(indexHtml.includes('class="settings-drawer"'));
     assert.ok(settingsHtml.includes('id="clientLog"'));
     assert.ok(settingsHtml.includes('开发者日志'));
+    assert.ok(advancedSettingsHtml.includes('id="clientLog"'));
     assert.equal(assistantPaneHtml.includes('id="clientLog"'), false);
     assert.equal(assistantPaneHtml.includes('开发者日志'), false);
     assert.ok(indexHtml.includes('class="toolbar-group'));
@@ -68,6 +72,7 @@ test('front-end keeps provider settings in a drawer instead of the primary reade
     assert.ok(appJs.includes('function setSettingsOpen'));
     assert.ok(appJs.includes("elements.settingsToggle.addEventListener('click'"));
     assert.ok(stylesCss.includes('.settings-drawer'));
+    assert.ok(stylesCss.includes('flex-direction: column'));
     assert.ok(stylesCss.includes('.toolbar-group'));
 });
 
@@ -75,12 +80,13 @@ test('front-end exposes OpenAI and DeepSeek provider presets', () => {
     assert.ok(indexHtml.includes('value="openai"'));
     assert.ok(indexHtml.includes('OpenAI / GPT'));
     assert.ok(indexHtml.includes('value="deepseek"'));
+    assert.ok(indexHtml.includes('value="deepseek" selected'));
     assert.ok(indexHtml.includes('DeepSeek'));
     assert.ok(indexHtml.includes('value="custom"'));
     assert.ok(appJs.includes('const PROVIDER_PRESETS'));
     assert.ok(appJs.includes('https://api.openai.com/v1/chat/completions'));
     assert.ok(appJs.includes('https://api.deepseek.com/chat/completions'));
-    assert.ok(appJs.includes('deepseek-v4-pro'));
+    assert.ok(appJs.includes('deepseek-v4-flash-vision-exp'));
     assert.ok(appJs.includes('function providerPresetFromSettings'));
     assert.ok(appJs.includes('preset: elements.providerKind.value'));
 });
@@ -201,6 +207,9 @@ test('front-end supports manual text translation without PDF selection', () => {
     assert.ok(indexHtml.includes('id="manualTranslationSubmit"'));
     assert.ok(indexHtml.includes('class="translation-form"'));
     assert.ok(indexHtml.includes('选中后自动翻译'));
+    assert.equal(indexHtml.includes('placeholder="输入文本'), false);
+    assert.equal(appJs.includes('translation-empty'), false);
+    assert.equal(appJs.includes('这里会显示翻译'), false);
     assert.equal(indexHtml.includes('id="selectionPreview"'), false);
     assert.equal(indexHtml.includes('当前选区'), false);
     assert.ok(appJs.includes('manualTranslationInput: document.getElementById'));
@@ -291,7 +300,8 @@ test('front-end supports sending image attachments to AI', () => {
     assert.ok(indexHtml.includes('id="attachImage"'));
     assert.ok(indexHtml.includes('id="imageInput"'));
     assert.ok(indexHtml.includes('id="imageAttachments"'));
-    assert.ok(indexHtml.includes('向 AI 提问，可附图'));
+    assert.ok(indexHtml.includes('id="questionInput"'));
+    assert.equal(indexHtml.includes('向 AI 提问，可附图'), false);
     assert.ok(appJs.includes('MAX_IMAGE_ATTACHMENTS'));
     assert.ok(appJs.includes("elements.attachImage.addEventListener('click'"));
     assert.ok(appJs.includes("elements.questionInput.addEventListener('paste', onQuestionPaste)"));
@@ -301,6 +311,16 @@ test('front-end supports sending image attachments to AI', () => {
     assert.ok(appJs.includes("logClient('image.send'"));
     assert.ok(appJs.includes('imageCount: images.length'));
     assert.ok(appJs.includes('message-images'));
+});
+
+test('front-end keeps empty reader and text inputs visually quiet', () => {
+    assert.ok(indexHtml.includes('id="emptyState"'));
+    assert.equal(indexHtml.includes('打开 PDF 开始'), false);
+    assert.equal(indexHtml.includes('placeholder="https://api.openai.com'), false);
+    assert.equal(indexHtml.includes('placeholder="gpt-4o-mini'), false);
+    assert.equal(indexHtml.includes('placeholder="向 AI'), false);
+    assert.equal(indexHtml.includes('placeholder="输入文本'), false);
+    assert.equal(appJs.includes('在此处开始键入'), false);
 });
 
 test('front-end supports page image actions and right-click visual selection', () => {

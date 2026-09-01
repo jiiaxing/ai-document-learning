@@ -39,6 +39,23 @@ test('config normalizes response paths when switching protocols', () => {
     assert.equal(anthropicConfig.provider.responseTextPath, 'content.0.text');
 });
 
+test('config defaults to the DeepSeek vision preset for fresh installs', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'ai-pdf-tutor-'));
+    try {
+        const config = loadConfig(tempDir, {
+            AI_TUTOR_LOG_FILE: join(tempDir, 'app.log')
+        });
+
+        assert.equal(config.provider.preset, 'deepseek');
+        assert.equal(config.provider.kind, 'openaiCompatible');
+        assert.equal(config.provider.protocol, 'openai');
+        assert.equal(config.provider.endpoint, 'https://api.deepseek.com/chat/completions');
+        assert.equal(config.provider.model, 'deepseek-v4-flash-vision-exp');
+    } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
 test('config supports OpenAI and DeepSeek provider presets', () => {
     const openAiConfig = loadConfig(resolve(__dirname, '../..'), {
         AI_TUTOR_PROVIDER_PRESET: 'openai',
@@ -59,7 +76,7 @@ test('config supports OpenAI and DeepSeek provider presets', () => {
     assert.equal(deepSeekConfig.provider.kind, 'openaiCompatible');
     assert.equal(deepSeekConfig.provider.protocol, 'openai');
     assert.equal(deepSeekConfig.provider.endpoint, 'https://api.deepseek.com/chat/completions');
-    assert.equal(deepSeekConfig.provider.model, 'deepseek-v4-pro');
+    assert.equal(deepSeekConfig.provider.model, 'deepseek-v4-flash-vision-exp');
 });
 
 test('config lets explicit environment provider override saved provider presets', () => {
@@ -72,7 +89,7 @@ test('config lets explicit environment provider override saved provider presets'
                 kind: 'openaiCompatible',
                 protocol: 'openai',
                 endpoint: 'https://api.deepseek.com/chat/completions',
-                model: 'deepseek-v4-pro',
+                model: 'deepseek-v4-flash-vision-exp',
                 apiKey: 'saved-secret'
             }
         }), 'utf8');
@@ -379,7 +396,7 @@ test('settings endpoint saves provider config without echoing API key', async ()
                 provider: {
                     preset: 'deepseek',
                     kind: 'openaiCompatible',
-                    model: 'deepseek-v4-pro',
+                    model: 'deepseek-v4-flash-vision-exp',
                     apiKey: ''
                 }
             })

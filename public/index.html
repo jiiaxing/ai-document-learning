@@ -25,7 +25,7 @@
                 <select id="providerKind">
                     <option value="mock">Mock</option>
                     <option value="openai">OpenAI / GPT</option>
-                    <option value="deepseek">DeepSeek</option>
+                    <option value="deepseek" selected>DeepSeek</option>
                     <option value="custom">自定义兼容</option>
                 </select>
             </label>
@@ -38,16 +38,16 @@
             </label>
             <label class="wide-field">
                 <span>Endpoint</span>
-                <input id="endpoint" type="url" placeholder="https://api.openai.com/v1/chat/completions" />
+                <input id="endpoint" type="url" />
             </label>
             <label>
                 <span>Model</span>
-                <input id="model" type="text" placeholder="gpt-4o-mini" />
+                <input id="model" type="text" />
             </label>
             <label>
                 <span>API Key</span>
-                <input id="apiKey" type="password" autocomplete="new-password" placeholder="留空则保留已保存 key" />
-                <span id="apiKeyState" class="field-note">未配置 key</span>
+                <input id="apiKey" type="password" autocomplete="new-password" />
+                <span id="apiKeyState" class="field-note">未配置 Key</span>
             </label>
             <label class="inline-check">
                 <input id="clearApiKey" type="checkbox" />
@@ -118,11 +118,10 @@
                     <textarea id="followupPromptTemplate" rows="5"></textarea>
                 </label>
             </div>
-        </details>
-
-        <details class="log-panel settings-log-panel">
-            <summary>开发者日志</summary>
-            <pre id="clientLog"></pre>
+            <details class="log-panel settings-log-panel">
+                <summary>开发者日志</summary>
+                <pre id="clientLog"></pre>
+            </details>
         </details>
     </form>
 
@@ -181,7 +180,7 @@
                 </div>
             </div>
             <form id="manualTranslationForm" class="translation-form">
-                <textarea id="manualTranslationInput" rows="6" placeholder="输入文本，或选中 PDF 文本"></textarea>
+                <textarea id="manualTranslationInput" rows="6"></textarea>
                 <div class="translation-form-actions">
                     <label class="inline-check">
                         <input id="autoTranslate" type="checkbox" checked />
@@ -197,7 +196,7 @@
 
         <section class="reader-pane">
             <div id="viewer" class="viewer" tabindex="0">
-                <div id="emptyState" class="empty-state">打开 PDF 开始</div>
+                <div id="emptyState" class="empty-state" aria-hidden="true"></div>
                 <div id="page" class="page-wrap" hidden></div>
                 <div id="selectionActions" class="selection-actions" hidden>
                     <button id="selectionExplain" class="primary" type="button">讲解</button>
@@ -240,7 +239,7 @@
             <div id="messages" class="messages"></div>
             <form id="questionForm" class="question-form">
                 <div id="imageAttachments" class="image-attachments" aria-live="polite" hidden></div>
-                <textarea id="questionInput" rows="2" placeholder="向 AI 提问，可附图"></textarea>
+                <textarea id="questionInput" rows="2"></textarea>
                 <div class="question-actions">
                     <button id="attachImage" type="button">图片</button>
                     <button type="submit" class="primary">发送</button>
