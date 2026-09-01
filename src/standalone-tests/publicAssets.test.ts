@@ -237,6 +237,7 @@ test('front-end keeps zoom lightweight through Ctrl wheel', () => {
     assert.ok(appJs.includes('function wheelZoomTargetScale'));
     assert.ok(appJs.includes('function queueSmoothZoomPreview'));
     assert.ok(appJs.includes('function commitSmoothZoomRender'));
+    assert.ok(appJs.includes('function restoreSmoothZoomPreviewAnchor'));
     assert.ok(appJs.includes('document.addEventListener(\'keydown\', onZoomModifierKeydown, true)'));
     assert.ok(appJs.includes('document.addEventListener(\'keyup\', onZoomModifierKeyup, true)'));
     assert.ok(appJs.includes('window.addEventListener(\'blur\', resetZoomModifierState)'));
@@ -248,7 +249,10 @@ test('front-end keeps zoom lightweight through Ctrl wheel', () => {
     assert.ok(appJs.includes("logClient('pdf.zoom.preview'"));
     assert.ok(appJs.includes("logClient('pdf.zoom.commit'"));
     assert.ok(appJs.includes("logClient('pdf.zoom.change'"));
+    assert.equal(appJs.includes('pageNode.style.width = `${baseWidth * previewRatio}px`;'), false);
+    assert.equal(appJs.includes('pageNode.style.height = `${baseHeight * previewRatio}px`;'), false);
     assert.ok(stylesCss.includes('.page-content'));
+    assert.ok(stylesCss.includes('.viewer.smooth-zooming'));
     assert.equal(indexHtml.includes('id="zoomOut"'), false);
     assert.equal(indexHtml.includes('id="zoomIn"'), false);
     assert.equal(indexHtml.includes('id="zoomInfo"'), false);

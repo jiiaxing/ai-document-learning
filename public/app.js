@@ -1338,7 +1338,7 @@ function applySmoothZoomPreview(anchor) {
     for (const pageNode of pageNodes) {
         applyPagePreviewScale(pageNode, previewRatio);
     }
-    restoreZoomAnchor(anchor);
+    restoreSmoothZoomPreviewAnchor(anchor, previewRatio);
     positionSelectionActions();
     positionVisualActions();
 }
@@ -1350,12 +1350,33 @@ function applyPagePreviewScale(pageNode, previewRatio) {
     if (!baseWidth || !baseHeight || !pageContent) {
         return;
     }
-    pageNode.style.width = `${baseWidth * previewRatio}px`;
-    pageNode.style.height = `${baseHeight * previewRatio}px`;
     pageContent.style.width = `${baseWidth}px`;
     pageContent.style.height = `${baseHeight}px`;
     pageContent.style.transformOrigin = '0 0';
     pageContent.style.transform = `scale(${previewRatio})`;
+}
+
+function restoreSmoothZoomPreviewAnchor(anchor, previewRatio) {
+    if (!anchor || !Number.isFinite(anchor.page) || !Number.isFinite(anchor.y) || !Number.isFinite(anchor.clientY)) {
+        return false;
+    }
+    const pageNode = pageElementForPage(anchor.page);
+    if (!pageNode) {
+        return false;
+    }
+    const pageRect = pageNode.getBoundingClientRect();
+    const baseWidth = Number(pageNode.dataset.renderedWidth) || pageRect.width;
+    const baseHeight = Number(pageNode.dataset.renderedHeight) || pageRect.height;
+    if (!baseWidth || !baseHeight) {
+        return false;
+    }
+    const nextY = pageRect.top + clamp(anchor.y, 0, 1) * baseHeight * previewRatio;
+    elements.viewer.scrollTop += nextY - anchor.clientY;
+    if (Number.isFinite(anchor.x) && Number.isFinite(anchor.clientX)) {
+        const nextX = pageRect.left + clamp(anchor.x, 0, 1) * baseWidth * previewRatio;
+        elements.viewer.scrollLeft += nextX - anchor.clientX;
+    }
+    return true;
 }
 
 function clearSmoothZoomPreviewStyles() {

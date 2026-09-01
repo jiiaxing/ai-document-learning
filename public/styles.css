@@ -913,6 +913,16 @@ button:focus-visible {
     background: rgba(31, 122, 91, 0.92);
 }
 
+.viewer.smooth-zooming {
+    scrollbar-color: transparent transparent;
+}
+
+.viewer.smooth-zooming::-webkit-scrollbar-track,
+.viewer.smooth-zooming::-webkit-scrollbar-thumb {
+    border-color: transparent;
+    background: transparent;
+}
+
 .empty-state {
     margin-top: 20vh;
     color: var(--muted);
@@ -928,6 +938,7 @@ button:focus-visible {
 .page-content {
     position: relative;
     transform-origin: 0 0;
+    will-change: transform;
 }
 
 .page-stack {
