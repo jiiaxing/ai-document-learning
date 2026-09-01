@@ -158,6 +158,7 @@ test('front-end supports visible PDF reader scrollbars and direct page jumping',
 
 test('front-end keeps zoom lightweight through Ctrl wheel', () => {
     assert.ok(appJs.includes('const MIN_SCALE = 0.05'));
+    assert.ok(appJs.includes('const MAX_SCALE = 5.0'));
     assert.ok(appJs.includes('const MIN_INITIAL_SCALE = 0.8'));
     assert.ok(appJs.includes('const VIEWER_MIN_AVAILABLE_WIDTH = 520'));
     assert.ok(appJs.includes('async function scaleForNewDocument'));
