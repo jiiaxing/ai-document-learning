@@ -13,6 +13,8 @@ const PDF_CONTEXT_RADIUS = 1;
 const PAGE_CONTEXT_MAX_CHARS = 9000;
 const PAGE_TURN_COOLDOWN_MS = 360;
 const FILE_PANEL_TRANSITION_MS = 220;
+const ACTION_MENU_GAP = 12;
+const ACTION_MENU_EDGE_GAP = 8;
 const MAX_IMAGE_ATTACHMENTS = 4;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const PAGE_IMAGE_MAX_EDGE = 1800;
@@ -327,7 +329,7 @@ function wireEvents() {
     elements.imageAttachments.addEventListener('click', onImageAttachmentClick);
     elements.questionInput.addEventListener('paste', onQuestionPaste);
     document.addEventListener('pointerdown', onReadingFileDocumentPointerDown, true);
-    document.addEventListener('mouseup', () => queueTextSelectionProbe('mouseup'), true);
+    document.addEventListener('mouseup', (event) => queueTextSelectionProbe('mouseup', actionAnchorFromEvent(event)), true);
 }
 
 function focusViewerUnlessInteractive(event) {
@@ -505,16 +507,16 @@ function onDocumentSelectionPointerUp(event) {
     if (event.button !== undefined && event.button !== 0) {
         return;
     }
-    queueTextSelectionProbe('pointerup');
+    queueTextSelectionProbe('pointerup', actionAnchorFromEvent(event));
 }
 
-function queueTextSelectionProbe(reason) {
+function queueTextSelectionProbe(reason, actionAnchor = null) {
     if (elements.lineMode.checked || elements.eraserMode.checked || state.visualSelectionDraft) {
         return;
     }
     window.setTimeout(() => {
         if (getPdfSelectionText()) {
-            queueSelectionProbe(reason);
+            queueSelectionProbe(reason, actionAnchor);
         }
     }, 0);
 }
@@ -1559,18 +1561,18 @@ function isViewerAtBottom() {
     return elements.viewer.scrollTop + elements.viewer.clientHeight >= elements.viewer.scrollHeight - 2;
 }
 
-function queueSelectionProbe(reason) {
+function queueSelectionProbe(reason, actionAnchor = null) {
     if (!state.pdfDoc) {
         return;
     }
     window.clearTimeout(state.selectionTimer);
     state.selectionTimer = window.setTimeout(() => {
-        void probeSelection(reason);
+        void probeSelection(reason, actionAnchor);
     }, 260);
 }
 
-async function probeSelection(reason) {
-    const selectionSnapshot = getPdfSelectionSnapshot();
+async function probeSelection(reason, actionAnchor = null) {
+    const selectionSnapshot = getPdfSelectionSnapshot(actionAnchor);
     const autoTranslateEnabled = elements.autoTranslate.checked;
     const autoExplainEnabled = elements.autoExplain.checked;
     if (selectionSnapshot) {
@@ -1580,7 +1582,6 @@ async function probeSelection(reason) {
     }
     const selectedText = selectionSnapshot?.text || '';
     if (elements.editMode.checked) {
-        hideSelectionActions('edit-mode');
         if (selectedText) {
             logClient('annotation.selection.ready', {
                 trigger: reason,
@@ -1589,7 +1590,6 @@ async function probeSelection(reason) {
                 rects: selectionSnapshot.rects.length
             });
         }
-        return;
     }
 
     if (selectionSnapshot) {
@@ -1702,17 +1702,13 @@ function positionSelectionActions() {
         hideSelectionActions('page-missing');
         return;
     }
-    const pageRect = pageNode.getBoundingClientRect();
-    const firstRect = [...selectionSnapshot.rects].sort((a, b) => a.y - b.y || a.x - b.x)[0];
-    const anchorX = pageRect.left + (firstRect.x + firstRect.width / 2) * pageRect.width;
-    const anchorY = pageRect.top + firstRect.y * pageRect.height;
-    const actionRect = elements.selectionActions.getBoundingClientRect();
-    const width = actionRect.width || 132;
-    const height = actionRect.height || 42;
-    const left = clamp(anchorX - width / 2, 8, window.innerWidth - width - 8);
-    const top = clamp(anchorY - height - 10, 8, window.innerHeight - height - 8);
-    elements.selectionActions.style.left = `${left}px`;
-    elements.selectionActions.style.top = `${top}px`;
+    const point = clientPointForActionAnchor(selectionSnapshot.actionAnchor)
+        || clientPointForTextSelection(selectionSnapshot, pageNode);
+    if (!point) {
+        hideSelectionActions('anchor-missing');
+        return;
+    }
+    placeActionMenuAtPoint(elements.selectionActions, point);
 }
 
 function positionVisualActions() {
@@ -1725,17 +1721,121 @@ function positionVisualActions() {
         clearVisualSelection('page-missing');
         return;
     }
+    const point = clientPointForActionAnchor(selection.actionAnchor)
+        || clientPointForVisualSelection(selection, pageNode);
+    if (!point) {
+        clearVisualSelection('anchor-missing');
+        return;
+    }
+    placeActionMenuAtPoint(elements.visualActions, point);
+}
+
+function actionAnchorFromEvent(event, pageNumber = null) {
+    if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) {
+        return null;
+    }
+    const pageNode = pageNumber ? pageElementForPage(pageNumber) : pageElementFromEvent(event);
+    const resolvedPage = pageNumber || Number(pageNode?.dataset.page || 0);
+    const anchor = {
+        clientX: event.clientX,
+        clientY: event.clientY
+    };
+    if (pageNode && Number.isFinite(resolvedPage) && resolvedPage > 0) {
+        const pageRect = pageNode.getBoundingClientRect();
+        if (pageRect.width && pageRect.height) {
+            anchor.page = resolvedPage;
+            anchor.x = clamp((event.clientX - pageRect.left) / pageRect.width, 0, 1);
+            anchor.y = clamp((event.clientY - pageRect.top) / pageRect.height, 0, 1);
+        }
+    }
+    return anchor;
+}
+
+function actionAnchorForSelection(actionAnchor, pageNumber, pageNode) {
+    if (!actionAnchor) {
+        return null;
+    }
+    const anchor = { ...actionAnchor };
+    if (Number.isFinite(anchor.page) && Number(anchor.page) !== pageNumber) {
+        return Number.isFinite(anchor.clientX) && Number.isFinite(anchor.clientY)
+            ? { clientX: anchor.clientX, clientY: anchor.clientY }
+            : null;
+    }
+    if ((!Number.isFinite(anchor.page) || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y))
+        && Number.isFinite(anchor.clientX) && Number.isFinite(anchor.clientY)) {
+        const pageRect = pageNode.getBoundingClientRect();
+        if (pageRect.width && pageRect.height) {
+            anchor.page = pageNumber;
+            anchor.x = clamp((anchor.clientX - pageRect.left) / pageRect.width, 0, 1);
+            anchor.y = clamp((anchor.clientY - pageRect.top) / pageRect.height, 0, 1);
+        }
+    }
+    return anchor;
+}
+
+function clientPointForActionAnchor(anchor) {
+    if (!anchor) {
+        return null;
+    }
+    if (Number.isFinite(anchor.page) && Number.isFinite(anchor.x) && Number.isFinite(anchor.y)) {
+        const pageNode = pageElementForPage(Number(anchor.page));
+        const pageRect = pageNode?.getBoundingClientRect();
+        if (pageRect?.width && pageRect.height) {
+            return {
+                x: pageRect.left + Number(anchor.x) * pageRect.width,
+                y: pageRect.top + Number(anchor.y) * pageRect.height
+            };
+        }
+    }
+    if (Number.isFinite(anchor.clientX) && Number.isFinite(anchor.clientY)) {
+        return { x: Number(anchor.clientX), y: Number(anchor.clientY) };
+    }
+    return null;
+}
+
+function clientPointForTextSelection(selectionSnapshot, pageNode) {
+    const pageRect = pageNode.getBoundingClientRect();
+    const sortedRects = [...selectionSnapshot.rects].sort((a, b) => a.y - b.y || a.x - b.x);
+    const lastRect = sortedRects[sortedRects.length - 1];
+    if (!lastRect || !pageRect.width || !pageRect.height) {
+        return null;
+    }
+    return {
+        x: pageRect.left + (lastRect.x + lastRect.width) * pageRect.width,
+        y: pageRect.top + (lastRect.y + lastRect.height / 2) * pageRect.height
+    };
+}
+
+function clientPointForVisualSelection(selection, pageNode) {
     const pageRect = pageNode.getBoundingClientRect();
     const rect = selection.rect;
-    const anchorX = pageRect.left + (rect.x + rect.width) * pageRect.width;
-    const anchorY = pageRect.top + rect.y * pageRect.height;
-    const actionRect = elements.visualActions.getBoundingClientRect();
+    if (!rect || !pageRect.width || !pageRect.height) {
+        return null;
+    }
+    return {
+        x: pageRect.left + (rect.x + rect.width) * pageRect.width,
+        y: pageRect.top + (rect.y + rect.height / 2) * pageRect.height
+    };
+}
+
+function placeActionMenuAtPoint(actionNode, point) {
+    const actionRect = actionNode.getBoundingClientRect();
     const width = actionRect.width || 132;
     const height = actionRect.height || 42;
-    const left = clamp(anchorX - width, 8, window.innerWidth - width - 8);
-    const top = clamp(anchorY - height - 10, 8, window.innerHeight - height - 8);
-    elements.visualActions.style.left = `${left}px`;
-    elements.visualActions.style.top = `${top}px`;
+    const rightSpace = window.innerWidth - point.x - ACTION_MENU_EDGE_GAP;
+    const leftSpace = point.x - ACTION_MENU_EDGE_GAP;
+    let left = point.x + ACTION_MENU_GAP;
+    if (rightSpace < width + ACTION_MENU_GAP && leftSpace >= width + ACTION_MENU_GAP) {
+        left = point.x - width - ACTION_MENU_GAP;
+    }
+    let top = point.y - height / 2;
+    if (top < ACTION_MENU_EDGE_GAP) {
+        top = point.y + ACTION_MENU_GAP;
+    } else if (top + height > window.innerHeight - ACTION_MENU_EDGE_GAP) {
+        top = point.y - height - ACTION_MENU_GAP;
+    }
+    actionNode.style.left = `${clamp(left, ACTION_MENU_EDGE_GAP, window.innerWidth - width - ACTION_MENU_EDGE_GAP)}px`;
+    actionNode.style.top = `${clamp(top, ACTION_MENU_EDGE_GAP, window.innerHeight - height - ACTION_MENU_EDGE_GAP)}px`;
 }
 
 function onSelectionActionDocumentPointerDown(event) {
@@ -1799,7 +1899,7 @@ async function translateSelectionFromAction(event) {
     await translateSelection(selection.text, source);
 }
 
-function getPdfSelectionSnapshot() {
+function getPdfSelectionSnapshot(actionAnchor = null) {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
         return null;
@@ -1838,7 +1938,8 @@ function getPdfSelectionSnapshot() {
     return {
         page: pageNumber,
         text,
-        rects: compactAnnotationRects(rects)
+        rects: compactAnnotationRects(rects),
+        actionAnchor: actionAnchorForSelection(actionAnchor, pageNumber, pageNode)
     };
 }
 
@@ -2047,7 +2148,8 @@ function startVisualSelection(event) {
         style: visualSelectionStyle(),
         start: point,
         end: point,
-        points: [{ x: point.x, y: point.y }]
+        points: [{ x: point.x, y: point.y }],
+        actionAnchor: actionAnchorFromEvent(event, point.page)
     };
     renderVisualSelectionDraft();
     logClient('visual.selection.start', { page: point.page });
@@ -2078,6 +2180,7 @@ function finishVisualSelection(event) {
     elements.page.releasePointerCapture?.(event.pointerId);
     const rawRect = rawRectFromVisualDraft(draft);
     const rect = rawRect ? padVisualSelectionRect(rawRect) : null;
+    const actionAnchor = actionAnchorFromEvent(event, draft.page) || draft.actionAnchor;
     state.visualSelectionDraft = null;
     removeVisualSelectionNodes();
     if (!rawRect || Math.max(rawRect.width, rawRect.height) < VISUAL_SELECTION_MIN_RATIO) {
@@ -2086,7 +2189,8 @@ function finishVisualSelection(event) {
             page,
             rect: { x: 0, y: 0, width: 1, height: 1 },
             kind: 'page',
-            style: draft.style || visualSelectionStyle()
+            style: draft.style || visualSelectionStyle(),
+            actionAnchor
         };
         showVisualActions('context-page-menu');
         logClient('visual.selection.context_menu', { page });
@@ -2097,7 +2201,8 @@ function finishVisualSelection(event) {
         rect,
         kind: 'region',
         style: draft.style || visualSelectionStyle(),
-        points: draft.points
+        points: draft.points,
+        actionAnchor
     };
     renderVisualSelection();
     showVisualActions('region');

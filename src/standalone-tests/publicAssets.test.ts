@@ -313,6 +313,14 @@ test('front-end shows only manual selection actions whose auto trigger is off', 
     assert.ok(appJs.includes('elements.selectionExplain.hidden = !canExplain'));
     assert.ok(appJs.includes('elements.selectionTranslate.hidden = !canTranslate'));
     assert.ok(appJs.includes('if (!autoTranslateEnabled && !autoExplainEnabled)'));
+    assert.equal(appJs.includes("hideSelectionActions('edit-mode')"), false);
+    assert.ok(appJs.includes("document.addEventListener('mouseup', (event) => queueTextSelectionProbe('mouseup', actionAnchorFromEvent(event)), true)"));
+    assert.ok(appJs.includes("queueTextSelectionProbe('pointerup', actionAnchorFromEvent(event))"));
+    assert.ok(appJs.includes('function actionAnchorFromEvent'));
+    assert.ok(appJs.includes('function actionAnchorForSelection'));
+    assert.ok(appJs.includes('function clientPointForActionAnchor'));
+    assert.ok(appJs.includes('function placeActionMenuAtPoint'));
+    assert.ok(appJs.includes('actionAnchor: actionAnchorForSelection(actionAnchor, pageNumber, pageNode)'));
     assert.ok(appJs.includes("logClient('selection.manual.ready'"));
     assert.ok(appJs.includes('explainSelectionFromAction'));
     assert.ok(appJs.includes('translateSelectionFromAction'));
@@ -445,6 +453,8 @@ test('front-end supports page image actions and right-click visual selection', (
     assert.ok(appJs.includes('function rawRectFromVisualDraft'));
     assert.ok(appJs.includes('function rawRectFromCorners'));
     assert.ok(appJs.includes('pointToPageRatioForPage(event, draft.page)'));
+    assert.ok(appJs.includes('actionAnchor: actionAnchorFromEvent(event, point.page)'));
+    assert.ok(appJs.includes('const actionAnchor = actionAnchorFromEvent(event, draft.page) || draft.actionAnchor'));
     assert.ok(appJs.includes('function padVisualSelectionRect'));
     assert.ok(appJs.includes('pushVisualSelectionPoint'));
     assert.ok(appJs.includes('function explainVisualSelectionFromAction'));
