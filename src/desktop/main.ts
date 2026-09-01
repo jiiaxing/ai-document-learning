@@ -31,6 +31,7 @@ function createDesktopConfig(): AppConfig {
         AI_TUTOR_HOST: '127.0.0.1',
         AI_TUTOR_PORT: process.env.AI_TUTOR_DESKTOP_PORT ?? '0',
         AI_TUTOR_PUBLIC_DIR: join(root, 'public'),
+        AI_TUTOR_LIBRARY_DIR: join(userDataDir, 'library'),
         AI_TUTOR_LOG_FILE: logFile
     });
 }
@@ -71,11 +72,11 @@ function buildMenu(): void {
             label: '文件',
             submenu: [
                 {
-                    label: '打开 PDF',
+                    label: '文件',
                     accelerator: 'CmdOrCtrl+O',
                     click: () => {
                         void mainWindow?.webContents.executeJavaScript(
-                            "document.getElementById('pdfInput')?.click()",
+                            "document.getElementById('filePanelToggle')?.click()",
                             true
                         );
                     }

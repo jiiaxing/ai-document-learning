@@ -40,6 +40,7 @@ export interface AppConfig {
     host: string;
     port: number;
     publicDir: string;
+    libraryDir: string;
     logLevel: LogLevel;
     logFile: string;
     provider: ProviderConfig;

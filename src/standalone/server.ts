@@ -4,6 +4,7 @@ import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:
 import { SettingsValidationError, applySettingsUpdate, loadConfig, publicSettingsFromConfig, saveConfigFile } from './config';
 import { createProvider } from './aiProvider';
 import { DeveloperLogger } from './logger';
+import { ReadingLibrary, ReadingLibraryError } from './library';
 import { prepareSse, writeSse } from './sse';
 import { AppConfig, ChatMessage, ExplainRequest, ImageAttachment, SafeClientConfig, SettingsUpdate } from './types';
 
@@ -22,6 +23,7 @@ export function createAppServer(config: AppConfig, logger: DeveloperLogger): Ser
     let runtimeConfig = config;
     let provider = createProvider(runtimeConfig, logger);
     const workspaceDir = dirname(config.publicDir);
+    const readingLibrary = new ReadingLibrary(config.libraryDir, logger);
 
     return createServer(async (req, res) => {
         const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
@@ -68,6 +70,32 @@ export function createAppServer(config: AppConfig, logger: DeveloperLogger): Ser
                 return;
             }
 
+            if (req.method === 'GET' && url.pathname === '/api/reading-files') {
+                sendJson(res, { files: readingLibrary.list() });
+                return;
+            }
+
+            if (req.method === 'POST' && url.pathname === '/api/reading-files/import') {
+                sendJson(res, { file: readingLibrary.importPdf(await readJson(req) as Record<string, unknown>) }, 201);
+                return;
+            }
+
+            const readingFileNotesId = readingFileIdFromNotesPath(url.pathname);
+            if (readingFileNotesId && req.method === 'GET') {
+                sendJson(res, { notes: readingLibrary.loadNotes(readingFileNotesId) });
+                return;
+            }
+
+            if (readingFileNotesId && req.method === 'PUT') {
+                const requestBody = await readJson(req);
+                const notes = isRecord(requestBody) && 'notes' in requestBody ? requestBody.notes : requestBody;
+                sendJson(res, {
+                    file: readingLibrary.saveNotes(readingFileNotesId, notes),
+                    notes
+                });
+                return;
+            }
+
             if (req.method === 'POST' && url.pathname === '/api/logs/client') {
                 const body = await readJson(req);
                 logger.debug(`client.${String((body as { event?: unknown }).event ?? 'event')}`, sanitizeClientLogData(body));
@@ -91,6 +119,12 @@ export function createAppServer(config: AppConfig, logger: DeveloperLogger): Ser
                     return;
                 }
 
+                const readingFileSourceId = readingFileIdFromSourcePath(url.pathname);
+                if (readingFileSourceId) {
+                    serveReadingFilePdf(readingLibrary, readingFileSourceId, res);
+                    return;
+                }
+
                 serveStatic(url.pathname, config.publicDir, res, logger);
                 return;
             }
@@ -103,12 +137,22 @@ export function createAppServer(config: AppConfig, logger: DeveloperLogger): Ser
                 message
             });
             if (!res.headersSent) {
-                sendJson(res, { error: message }, error instanceof SettingsValidationError ? 400 : 500);
+                sendJson(res, { error: message }, statusCodeForError(error));
             } else {
                 res.end();
             }
         }
     });
+}
+
+function statusCodeForError(error: unknown): number {
+    if (error instanceof SettingsValidationError) {
+        return 400;
+    }
+    if (error instanceof ReadingLibraryError) {
+        return error.statusCode;
+    }
+    return 500;
 }
 
 function listWorkspacePdfs(cwd: string): Array<{ name: string; size: number; updatedAt: string }> {
@@ -152,6 +196,23 @@ function serveWorkspacePdf(urlPath: string, workspaceDir: string, res: ServerRes
     }
 
     serveExistingFile(filePath, res, logger, 'workspace_pdf.not_found');
+}
+
+function serveReadingFilePdf(library: ReadingLibrary, id: string, res: ServerResponse): void {
+    res.writeHead(200, {
+        'Content-Type': 'application/pdf'
+    });
+    library.createPdfStream(id).pipe(res);
+}
+
+function readingFileIdFromSourcePath(pathname: string): string | null {
+    const match = pathname.match(/^\/reading-files\/([^/]+)\/source\.pdf$/);
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
+function readingFileIdFromNotesPath(pathname: string): string | null {
+    const match = pathname.match(/^\/api\/reading-files\/([^/]+)\/notes$/);
+    return match ? decodeURIComponent(match[1]) : null;
 }
 
 export async function startServer(config = loadConfig(), logger = new DeveloperLogger({
@@ -439,6 +500,10 @@ function sanitizeClientLogData(body: unknown): unknown {
 
     const { event, ...rest } = body as Record<string, unknown>;
     return rest;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 if (require.main === module) {

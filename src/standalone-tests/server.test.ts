@@ -301,6 +301,88 @@ test('server exposes local PDF.js assets and workspace PDF test file', async () 
     }
 });
 
+test('reading file library imports PDFs and persists annotation notes', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'ai-pdf-tutor-'));
+    const logFile = join(tempDir, 'app.log');
+    const libraryDir = join(tempDir, 'library');
+    const config = loadConfig(tempDir, {
+        AI_TUTOR_PROVIDER: 'mock',
+        AI_TUTOR_PORT: '0',
+        AI_TUTOR_LOG_FILE: logFile,
+        AI_TUTOR_LIBRARY_DIR: libraryDir,
+        AI_TUTOR_PUBLIC_DIR: join(tempDir, 'public')
+    });
+    const logger = new DeveloperLogger({ logFile, level: 'debug', echo: false });
+    const server = createAppServer(config, logger);
+
+    try {
+        await new Promise<void>((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
+        const port = getListeningPort(server);
+        const baseUrl = `http://127.0.0.1:${port}`;
+
+        const emptyListResponse = await fetch(`${baseUrl}/api/reading-files`);
+        assert.equal(emptyListResponse.status, 200);
+        assert.deepEqual(await emptyListResponse.json(), { files: [] });
+
+        const importResponse = await fetch(`${baseUrl}/api/reading-files/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: 'unit lecture.pdf',
+                dataBase64: Buffer.from(minimalPdfFixture()).toString('base64')
+            })
+        });
+
+        assert.equal(importResponse.status, 201);
+        const imported = await importResponse.json() as { file: { id: string; title: string; updatedAt: string } };
+        assert.match(imported.file.id, /^doc_[0-9a-f-]{36}$/);
+        assert.equal(imported.file.title, 'unit lecture.pdf');
+        assert.match(imported.file.updatedAt, /^\d{4}-\d{2}-\d{2}T/);
+
+        const listResponse = await fetch(`${baseUrl}/api/reading-files`);
+        const list = await listResponse.json() as { files: Array<{ id: string; title: string; updatedAt: string }> };
+        assert.deepEqual(list.files, [imported.file]);
+
+        const pdfResponse = await fetch(`${baseUrl}/reading-files/${imported.file.id}/source.pdf`);
+        assert.equal(pdfResponse.status, 200);
+        assert.match(pdfResponse.headers.get('content-type') ?? '', /application\/pdf/);
+        assert.ok((await pdfResponse.arrayBuffer()).byteLength > 100);
+
+        const initialNotesResponse = await fetch(`${baseUrl}/api/reading-files/${imported.file.id}/notes`);
+        assert.equal(initialNotesResponse.status, 200);
+        assert.deepEqual(await initialNotesResponse.json(), { notes: {} });
+
+        const notes = {
+            1: [{
+                id: 'note-1',
+                type: 'highlight',
+                page: 1,
+                text: 'Operating systems',
+                rects: [{ x: 0.1, y: 0.2, width: 0.3, height: 0.04 }],
+                createdAt: new Date('2026-09-01T00:00:00.000Z').toISOString()
+            }]
+        };
+        const saveNotesResponse = await fetch(`${baseUrl}/api/reading-files/${imported.file.id}/notes`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes })
+        });
+        assert.equal(saveNotesResponse.status, 200);
+
+        const savedNotesResponse = await fetch(`${baseUrl}/api/reading-files/${imported.file.id}/notes`);
+        assert.deepEqual(await savedNotesResponse.json(), { notes });
+
+        const documentDir = join(libraryDir, 'documents', imported.file.id);
+        assert.equal(existsSync(join(documentDir, 'source.pdf')), true);
+        assert.equal(existsSync(join(documentDir, 'notes.json')), true);
+        assert.match(readFileSync(join(libraryDir, 'library.json'), 'utf8'), /unit lecture\.pdf/);
+        assert.match(readFileSync(join(documentDir, 'notes.json'), 'utf8'), /Operating systems/);
+    } finally {
+        await closeServer(server);
+        rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
 test('settings endpoint saves provider config without echoing API key', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ai-pdf-tutor-'));
     const logFile = join(tempDir, 'app.log');

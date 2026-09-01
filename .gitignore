@@ -17,6 +17,7 @@ ai-tutor.config.json
 
 # Logs and temporary runtime files
 logs/
+library/
 *.log
 server-runtime*.log
 tmp-*.log

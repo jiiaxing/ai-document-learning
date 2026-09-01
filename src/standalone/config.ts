@@ -128,6 +128,7 @@ export function loadConfig(cwd = process.cwd(), env = process.env): AppConfig {
         host: stringValue(env.AI_TUTOR_HOST ?? fileConfig.host ?? '127.0.0.1'),
         port: numberValue(env.AI_TUTOR_PORT ?? fileConfig.port, 5178),
         publicDir: resolve(cwd, stringValue(env.AI_TUTOR_PUBLIC_DIR ?? fileConfig.publicDir ?? 'public')),
+        libraryDir: resolve(cwd, stringValue(env.AI_TUTOR_LIBRARY_DIR ?? fileConfig.libraryDir ?? 'library')),
         logLevel,
         logFile,
         provider: {
@@ -230,6 +231,7 @@ export function saveConfigFile(config: AppConfig, cwd = process.cwd(), configure
     const persisted = {
         host: config.host,
         port: config.port > 0 ? config.port : 5178,
+        libraryDir: config.libraryDir,
         logLevel: config.logLevel,
         provider: {
             preset: config.provider.preset,

@@ -96,11 +96,15 @@ Local runtime configuration:
 ai-tutor.config.json
 ```
 
+Standalone reading files are stored under `library/` by default. Each imported PDF gets its own copied source PDF and notes file.
+
 For desktop builds, runtime configuration and logs are stored in the Electron user data directory:
 
 ```text
 C:\Users\<user>\AppData\Roaming\AI PDF Tutor\
 ```
+
+Desktop reading files are stored in the same user data directory under `library/`.
 
 The default provider preset is DeepSeek. The settings drawer also includes Mock, OpenAI / GPT, and custom OpenAI-compatible endpoints.
 
@@ -141,6 +145,7 @@ Example DeepSeek provider:
 ## Features
 
 - Local PDF opening and rendering
+- Reading file library with imported PDF copies and per-document notes
 - Single-page and continuous reading modes
 - Page navigation, direct page jumping, and Ctrl+wheel zoom
 - Selected-text explanation and translation

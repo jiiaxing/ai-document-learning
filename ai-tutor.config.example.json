@@ -1,6 +1,7 @@
 {
   "host": "127.0.0.1",
   "port": 5178,
+  "libraryDir": "library",
   "logLevel": "debug",
   "provider": {
     "preset": "deepseek",
