@@ -78,6 +78,9 @@ const elements = {
     collapseAssistant: document.getElementById('collapseAssistant'),
     restoreAssistant: document.getElementById('restoreAssistant'),
     paneRestoreBar: document.getElementById('paneRestoreBar'),
+    settingsToggle: document.getElementById('settingsToggle'),
+    settingsClose: document.getElementById('settingsClose'),
+    settingsBackdrop: document.getElementById('settingsBackdrop'),
     providerKind: document.getElementById('providerKind'),
     protocol: document.getElementById('protocol'),
     endpoint: document.getElementById('endpoint'),
@@ -218,6 +221,9 @@ async function boot() {
 
 function wireEvents() {
     elements.settingsForm.addEventListener('submit', saveSettings);
+    elements.settingsToggle.addEventListener('click', () => setSettingsOpen(!settingsOpen()));
+    elements.settingsClose.addEventListener('click', () => setSettingsOpen(false));
+    elements.settingsBackdrop.addEventListener('click', () => setSettingsOpen(false));
     elements.providerKind.addEventListener('change', updateProviderFields);
     elements.apiKey.addEventListener('input', () => {
         state.apiKeyTouched = true;
@@ -419,6 +425,23 @@ function onDocumentPointerDown(event) {
         return;
     }
     finishActiveNoteEdit();
+}
+
+function settingsOpen() {
+    return !elements.settingsForm.hidden;
+}
+
+function setSettingsOpen(open) {
+    elements.settingsForm.hidden = !open;
+    elements.settingsBackdrop.hidden = !open;
+    elements.settingsToggle.setAttribute('aria-expanded', String(open));
+    document.body.classList.toggle('settings-open', open);
+    if (open) {
+        elements.providerKind.focus();
+    } else if (document.activeElement && elements.settingsForm.contains(document.activeElement)) {
+        elements.settingsToggle.focus();
+    }
+    logClient('settings.drawer.toggle', { open });
 }
 
 function onTextSubmitShortcut(event) {
@@ -1015,6 +1038,11 @@ function visibleContinuousPage() {
 }
 
 function onPdfKeydown(event) {
+    if (event.key === 'Escape' && settingsOpen()) {
+        event.preventDefault();
+        setSettingsOpen(false);
+        return;
+    }
     if (event.key === 'Escape' && state.notePlacementMode) {
         event.preventDefault();
         cancelNotePlacement('escape');

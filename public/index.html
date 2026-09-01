@@ -15,8 +15,22 @@
                 <span id="connectionStatus">初始化</span>
             </div>
         </div>
+        <div class="header-actions">
+            <button id="settingsToggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="settingsForm">设置</button>
+        </div>
+    </header>
 
-        <form id="settingsForm" class="settings-bar" autocomplete="off">
+    <div id="settingsBackdrop" class="settings-backdrop" hidden></div>
+    <form id="settingsForm" class="settings-drawer" autocomplete="off" hidden>
+        <div class="settings-drawer-header">
+            <div>
+                <strong>设置</strong>
+                <span>AI 服务与提示词</span>
+            </div>
+            <button id="settingsClose" class="icon-button" type="button" aria-label="关闭设置" title="关闭设置">×</button>
+        </div>
+
+        <div class="settings-bar">
             <label>
                 <span>Provider</span>
                 <select id="providerKind">
@@ -49,123 +63,135 @@
             </label>
             <button id="saveSettings" class="primary" type="submit">保存设置</button>
             <span id="settingsStatus" class="settings-status"></span>
+        </div>
 
-            <details class="advanced-settings">
-                <summary>高级</summary>
-                <div class="advanced-grid">
-                    <label>
-                        <span>Key Header</span>
-                        <input id="apiKeyHeader" type="text" />
-                    </label>
-                    <label>
-                        <span>Key Prefix</span>
-                        <input id="apiKeyPrefix" type="text" />
-                    </label>
-                    <label>
-                        <span>Response Path</span>
-                        <input id="responseTextPath" type="text" />
-                    </label>
-                    <label>
-                        <span>Max chars</span>
-                        <input id="maxSelectionChars" type="number" min="100" step="100" />
-                    </label>
-                    <label>
-                        <span>视觉选择</span>
-                        <select id="visualSelectionStyle">
-                            <option value="path">画线条</option>
-                            <option value="box">拉框</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span>Anthropic Version</span>
-                        <input id="anthropicVersion" type="text" />
-                    </label>
-                    <label>
-                        <span>Anthropic Max Tokens</span>
-                        <input id="anthropicMaxTokens" type="number" min="1" />
-                    </label>
-                    <label class="textarea-field">
-                        <span>Extra Headers JSON</span>
-                        <textarea id="extraHeadersJson" rows="3"></textarea>
-                    </label>
-                    <label class="textarea-field">
-                        <span>Extra Body JSON</span>
-                        <textarea id="extraBodyJson" rows="3"></textarea>
-                    </label>
-                </div>
-                <div class="prompt-grid">
-                    <label class="prompt-field">
-                        <span>系统提示词</span>
-                        <textarea id="systemPrompt" rows="4"></textarea>
-                    </label>
-                    <label class="prompt-field">
-                        <span>讲解提示词</span>
-                        <textarea id="explainPromptTemplate" rows="5"></textarea>
-                    </label>
-                    <label class="prompt-field">
-                        <span>翻译提示词</span>
-                        <textarea id="translatePromptTemplate" rows="5"></textarea>
-                    </label>
-                    <label class="prompt-field">
-                        <span>追问提示词</span>
-                        <textarea id="followupPromptTemplate" rows="5"></textarea>
-                    </label>
-                </div>
-            </details>
-        </form>
-    </header>
+        <details class="advanced-settings">
+            <summary>高级</summary>
+            <div class="advanced-grid">
+                <label>
+                    <span>Key Header</span>
+                    <input id="apiKeyHeader" type="text" />
+                </label>
+                <label>
+                    <span>Key Prefix</span>
+                    <input id="apiKeyPrefix" type="text" />
+                </label>
+                <label>
+                    <span>Response Path</span>
+                    <input id="responseTextPath" type="text" />
+                </label>
+                <label>
+                    <span>Max chars</span>
+                    <input id="maxSelectionChars" type="number" min="100" step="100" />
+                </label>
+                <label>
+                    <span>视觉选择</span>
+                    <select id="visualSelectionStyle">
+                        <option value="path">画线条</option>
+                        <option value="box">拉框</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Anthropic Version</span>
+                    <input id="anthropicVersion" type="text" />
+                </label>
+                <label>
+                    <span>Anthropic Max Tokens</span>
+                    <input id="anthropicMaxTokens" type="number" min="1" />
+                </label>
+                <label class="textarea-field">
+                    <span>Extra Headers JSON</span>
+                    <textarea id="extraHeadersJson" rows="3"></textarea>
+                </label>
+                <label class="textarea-field">
+                    <span>Extra Body JSON</span>
+                    <textarea id="extraBodyJson" rows="3"></textarea>
+                </label>
+            </div>
+            <div class="prompt-grid">
+                <label class="prompt-field">
+                    <span>系统提示词</span>
+                    <textarea id="systemPrompt" rows="4"></textarea>
+                </label>
+                <label class="prompt-field">
+                    <span>讲解提示词</span>
+                    <textarea id="explainPromptTemplate" rows="5"></textarea>
+                </label>
+                <label class="prompt-field">
+                    <span>翻译提示词</span>
+                    <textarea id="translatePromptTemplate" rows="5"></textarea>
+                </label>
+                <label class="prompt-field">
+                    <span>追问提示词</span>
+                    <textarea id="followupPromptTemplate" rows="5"></textarea>
+                </label>
+            </div>
+        </details>
+    </form>
 
     <section class="file-toolbar">
-        <button id="openPdf" class="primary" type="button">打开 PDF</button>
-        <input id="pdfInput" type="file" accept="application/pdf,.pdf" hidden />
-        <select id="workspacePdfSelect" aria-label="工作区 PDF"></select>
-        <button id="openWorkspacePdf" type="button">打开工作区 PDF</button>
-        <button id="prevPage" type="button" aria-label="上一页">←</button>
-        <span id="pageInfo" class="page-info">- / -</span>
-        <input id="pageJumpInput" class="page-jump-input" type="number" min="1" step="1" aria-label="跳转页码" placeholder="页码" />
-        <button id="pageJumpButton" type="button">跳转</button>
-        <input id="pageSlider" class="page-slider" type="range" min="1" max="1" step="1" value="1" aria-label="页码滑块" disabled />
-        <label class="inline-check reader-mode-control">
-            <span>阅读模式</span>
+        <div class="toolbar-group file-group">
+            <button id="openPdf" class="primary" type="button">打开 PDF</button>
+            <input id="pdfInput" type="file" accept="application/pdf,.pdf" hidden />
+            <select id="workspacePdfSelect" aria-label="工作区 PDF"></select>
+            <button id="openWorkspacePdf" type="button" title="打开工作区 PDF">工作区</button>
+        </div>
+        <div class="toolbar-group nav-group">
+            <button id="prevPage" type="button" aria-label="上一页">←</button>
+            <span id="pageInfo" class="page-info">- / -</span>
+            <input id="pageJumpInput" class="page-jump-input" type="number" min="1" step="1" aria-label="跳转页码" placeholder="页码" />
+            <button id="pageJumpButton" type="button" title="跳转到指定页码">跳</button>
+            <input id="pageSlider" class="page-slider" type="range" min="1" max="1" step="1" value="1" aria-label="页码滑块" disabled />
+            <button id="nextPage" type="button" aria-label="下一页">→</button>
+        </div>
+        <div class="toolbar-group view-group">
             <select id="readerMode" aria-label="阅读模式">
                 <option value="single">单页</option>
                 <option value="continuous">连续</option>
             </select>
-        </label>
-        <button id="explainPage" type="button">讲解本页</button>
-        <button id="translatePage" type="button">翻译本页</button>
-        <button id="nextPage" type="button" aria-label="下一页">→</button>
-        <button id="zoomOut" type="button" aria-label="缩小">−</button>
-        <span id="zoomInfo" class="page-info">125%</span>
-        <button id="zoomIn" type="button" aria-label="放大">+</button>
-        <label class="inline-check">
-            <input id="autoTranslate" type="checkbox" checked />
-            <span>选区后自动翻译</span>
-        </label>
-        <label class="inline-check">
-            <input id="autoExplain" type="checkbox" checked />
-            <span>选区后自动讲解</span>
-        </label>
-        <label class="inline-check">
-            <input id="editMode" type="checkbox" />
-            <span>批注模式</span>
-        </label>
-        <button id="addHighlight" type="button">高亮选区</button>
-        <button id="undoHighlight" type="button">撤销高亮</button>
-        <button id="addNote" type="button">笔记</button>
-        <button id="noteFontDown" type="button" aria-label="减小笔记字号">A−</button>
-        <span id="noteFontInfo" class="page-info">字号</span>
-        <button id="noteFontUp" type="button" aria-label="增大笔记字号">A+</button>
-        <button id="deleteNote" type="button">删除笔记</button>
-        <label class="inline-check">
-            <input id="lineMode" type="checkbox" />
-            <span>线条模式</span>
-        </label>
-        <label class="inline-check">
-            <input id="eraserMode" type="checkbox" />
-            <span>橡皮</span>
-        </label>
-        <button id="clearPageAnnotations" type="button">清本页批注</button>
+            <button id="zoomOut" type="button" aria-label="缩小">−</button>
+            <span id="zoomInfo" class="page-info">125%</span>
+            <button id="zoomIn" type="button" aria-label="放大">+</button>
+        </div>
+        <div class="toolbar-group ai-group">
+            <button id="explainPage" type="button" title="讲解本页">讲解页</button>
+            <button id="translatePage" type="button" title="翻译本页">翻译页</button>
+            <label class="inline-check">
+                <input id="autoTranslate" type="checkbox" checked />
+                <span>自动译</span>
+            </label>
+            <label class="inline-check">
+                <input id="autoExplain" type="checkbox" checked />
+                <span>自动讲</span>
+            </label>
+        </div>
+        <div class="toolbar-group annotation-group">
+            <details class="toolbar-menu annotation-menu">
+                <summary>批注工具</summary>
+                <div class="annotation-popover">
+                    <label class="inline-check">
+                        <input id="editMode" type="checkbox" />
+                        <span>批注</span>
+                    </label>
+                    <button id="addHighlight" type="button">高亮</button>
+                    <button id="undoHighlight" type="button">撤销</button>
+                    <button id="addNote" type="button">笔记</button>
+                    <button id="noteFontDown" type="button" aria-label="减小笔记字号">A−</button>
+                    <span id="noteFontInfo" class="page-info">字号</span>
+                    <button id="noteFontUp" type="button" aria-label="增大笔记字号">A+</button>
+                    <button id="deleteNote" type="button">删除</button>
+                    <label class="inline-check">
+                        <input id="lineMode" type="checkbox" />
+                        <span>线条</span>
+                    </label>
+                    <label class="inline-check">
+                        <input id="eraserMode" type="checkbox" />
+                        <span>橡皮</span>
+                    </label>
+                    <button id="clearPageAnnotations" type="button">清本页</button>
+                </div>
+            </details>
+        </div>
     </section>
 
     <main id="appShell" class="app-shell">

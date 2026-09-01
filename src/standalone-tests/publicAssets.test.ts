@@ -45,6 +45,17 @@ test('front-end exposes prompt template settings', () => {
     assert.ok(appJs.includes('followupPromptTemplate: elements.followupPromptTemplate.value'));
 });
 
+test('front-end keeps provider settings in a drawer instead of the primary reader chrome', () => {
+    assert.ok(indexHtml.includes('id="settingsToggle"'));
+    assert.ok(indexHtml.includes('id="settingsBackdrop"'));
+    assert.ok(indexHtml.includes('class="settings-drawer"'));
+    assert.ok(indexHtml.includes('class="toolbar-group'));
+    assert.ok(appJs.includes('function setSettingsOpen'));
+    assert.ok(appJs.includes("elements.settingsToggle.addEventListener('click'"));
+    assert.ok(stylesCss.includes('.settings-drawer'));
+    assert.ok(stylesCss.includes('.toolbar-group'));
+});
+
 test('front-end builds hidden PDF context and anchors new assistant replies at their start', () => {
     assert.ok(appJs.includes('buildPageContext(selectionSnapshot.page)'));
     assert.ok(appJs.includes('buildPageContext(state.currentPage)'));
