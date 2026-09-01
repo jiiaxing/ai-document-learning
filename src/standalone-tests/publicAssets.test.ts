@@ -256,15 +256,18 @@ test('front-end exposes local PDF annotation tools', () => {
     const annotationRibbonCss = stylesCss.match(/\.annotation-ribbon \{[\s\S]*?\}/)?.[0] || '';
 
     assert.ok(appJs.includes("const ANNOTATION_STORE_KEY = 'aiPdfTutor.annotations.v1'"));
-    assert.ok(topChromeHtml.includes('id="annotationToggle"'));
-    assert.ok(topChromeHtml.includes('aria-controls="annotationRibbon"'));
-    assert.ok(annotationRibbonHtml.includes('id="editMode"'));
+    assert.equal(topChromeHtml.includes('id="annotationToggle"'), false);
+    assert.equal(topChromeHtml.includes('>批注工具</button>'), false);
+    assert.equal(annotationRibbonHtml.includes('id="editMode"'), false);
+    assert.equal(annotationRibbonHtml.includes('<span>批注</span>'), false);
+    assert.equal(annotationRibbonHtml.includes('hidden'), false);
     assert.ok(annotationRibbonHtml.includes('id="addHighlight"'));
     assert.ok(annotationRibbonHtml.includes('id="clearPageAnnotations"'));
     assert.equal(indexHtml.includes('annotation-popover'), false);
     assert.equal(indexHtml.includes('toolbar-menu'), false);
-    assert.ok(appJs.includes("elements.annotationToggle.addEventListener('click', toggleAnnotationRibbon)"));
-    assert.ok(appJs.includes('function setAnnotationRibbonOpen'));
+    assert.equal(appJs.includes("elements.annotationToggle.addEventListener('click', toggleAnnotationRibbon)"), false);
+    assert.equal(appJs.includes('function setAnnotationRibbonOpen'), false);
+    assert.equal(stylesCss.includes('.annotation-ribbon[hidden]'), false);
     assert.ok(annotationRibbonCss.includes('display: flex'));
     assert.ok(annotationRibbonCss.includes('border-bottom: 1px solid var(--line)'));
     assert.ok(annotationRibbonCss.includes('overflow-x: auto'));
@@ -383,10 +386,10 @@ test('front-end renders editable note boxes and erasable freehand lines', () => 
     assert.equal(appJs.includes('window.prompt'), false);
     assert.equal(appJs.includes('openNoteComposer'), false);
     assert.equal(appJs.includes('pendingFreeNoteText'), false);
+    assert.equal(appJs.includes('editMode'), false);
     assert.ok(appJs.includes('lineMode: document.getElementById'));
     assert.ok(appJs.includes('eraserMode: document.getElementById'));
     assert.ok(appJs.includes('function resetTransientAnnotationTools'));
-    assert.ok(appJs.includes('editMode: false'));
     assert.ok(appJs.includes('saveUiPrefs();'));
     assert.ok(appJs.includes("elements.page.addEventListener('pointerdown', onPagePointerDown)"));
     assert.ok(appJs.includes("type: 'line'"));

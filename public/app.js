@@ -129,7 +129,6 @@ const elements = {
     readingFileContextMenu: document.getElementById('readingFileContextMenu'),
     deleteReadingFile: document.getElementById('deleteReadingFile'),
     pdfInput: document.getElementById('pdfInput'),
-    annotationToggle: document.getElementById('annotationToggle'),
     annotationRibbon: document.getElementById('annotationRibbon'),
     prevPage: document.getElementById('prevPage'),
     nextPage: document.getElementById('nextPage'),
@@ -139,7 +138,6 @@ const elements = {
     pageInfo: document.getElementById('pageInfo'),
     autoTranslate: document.getElementById('autoTranslate'),
     autoExplain: document.getElementById('autoExplain'),
-    editMode: document.getElementById('editMode'),
     addHighlight: document.getElementById('addHighlight'),
     undoHighlight: document.getElementById('undoHighlight'),
     addNote: document.getElementById('addNote'),
@@ -266,7 +264,6 @@ function wireEvents() {
     elements.readingFileList.addEventListener('click', onReadingFileListClick);
     elements.readingFileList.addEventListener('contextmenu', onReadingFileContextMenu);
     elements.deleteReadingFile.addEventListener('click', deleteReadingFileFromContextMenu);
-    elements.annotationToggle.addEventListener('click', toggleAnnotationRibbon);
     elements.prevPage.addEventListener('click', () => gotoPage(state.currentPage - 1));
     elements.nextPage.addEventListener('click', () => gotoPage(state.currentPage + 1));
     elements.pageJumpInput.addEventListener('input', onPageJumpInput);
@@ -277,7 +274,6 @@ function wireEvents() {
     elements.visualSelectionStyle.addEventListener('change', onVisualSelectionStyleChanged);
     elements.autoTranslate.addEventListener('change', onAutoTriggerChanged);
     elements.autoExplain.addEventListener('change', onAutoTriggerChanged);
-    elements.editMode.addEventListener('change', onEditModeChanged);
     elements.addHighlight.addEventListener('click', addHighlightFromSelection);
     elements.undoHighlight.addEventListener('click', undoLastHighlight);
     elements.addNote.addEventListener('click', addNoteFromSelection);
@@ -343,16 +339,6 @@ function focusViewerUnlessInteractive(event) {
 function isInteractiveTarget(target) {
     return target instanceof HTMLElement
         && Boolean(target.closest('button, input, textarea, select, [contenteditable="true"], .annotation-note-box'));
-}
-
-function toggleAnnotationRibbon() {
-    setAnnotationRibbonOpen(elements.annotationRibbon.hidden);
-}
-
-function setAnnotationRibbonOpen(open) {
-    elements.annotationRibbon.hidden = !open;
-    elements.annotationToggle.setAttribute('aria-expanded', String(open));
-    elements.annotationToggle.classList.toggle('active-tool', open);
 }
 
 function setPaneCollapsed(pane, collapsed) {
@@ -1349,27 +1335,10 @@ function onAutoTriggerChanged() {
     }
 }
 
-function onEditModeChanged() {
-    if (!elements.editMode.checked) {
-        cancelNotePlacement('edit-off');
-        elements.lineMode.checked = false;
-        elements.eraserMode.checked = false;
-        cancelLineDraft();
-    }
-    saveUiPrefs();
-    updateAnnotationControls();
-    logClient('annotation.mode', { enabled: elements.editMode.checked });
-    flashStatus(elements.editMode.checked ? '批注模式' : providerLabel());
-}
-
 function onLineModeChanged() {
-    saveUiPrefs();
-    updateAnnotationControls();
     if (elements.lineMode.checked) {
         cancelNotePlacement('line-mode');
         elements.eraserMode.checked = false;
-        elements.editMode.checked = true;
-        saveUiPrefs();
         elements.page.classList.add('line-drawing-active');
         flashStatus('线条模式：在 PDF 上拖动绘制自由线条');
     } else {
@@ -1377,31 +1346,29 @@ function onLineModeChanged() {
         cancelLineDraft();
         flashStatus(providerLabel());
     }
+    saveUiPrefs();
+    updateAnnotationControls();
     logClient('annotation.line_mode', { enabled: elements.lineMode.checked });
 }
 
 function onEraserModeChanged() {
-    saveUiPrefs();
     if (elements.eraserMode.checked) {
         elements.lineMode.checked = false;
         cancelNotePlacement('eraser-mode');
         cancelLineDraft();
-        elements.editMode.checked = true;
-        saveUiPrefs();
         flashStatus('橡皮：点击线条删除');
     } else {
         flashStatus(providerLabel());
     }
+    saveUiPrefs();
     updateAnnotationControls();
     logClient('annotation.eraser_mode', { enabled: elements.eraserMode.checked });
 }
 
 function resetTransientAnnotationTools() {
-    elements.editMode.checked = false;
     elements.lineMode.checked = false;
     elements.eraserMode.checked = false;
     elements.page.classList.remove('line-drawing-active', 'note-placement-active', 'eraser-active');
-    state.uiPrefs.editMode = false;
     state.uiPrefs.lineMode = false;
     state.uiPrefs.eraserMode = false;
     updateAnnotationControls();
@@ -1581,17 +1548,6 @@ async function probeSelection(reason, actionAnchor = null) {
         updateToolbar();
     }
     const selectedText = selectionSnapshot?.text || '';
-    if (elements.editMode.checked) {
-        if (selectedText) {
-            logClient('annotation.selection.ready', {
-                trigger: reason,
-                page: selectionSnapshot.page,
-                textLength: selectedText.length,
-                rects: selectionSnapshot.rects.length
-            });
-        }
-    }
-
     if (selectionSnapshot) {
         state.lastSelection = selectedText;
         if (showSelectionActions(selectionSnapshot)) {
@@ -2441,7 +2397,6 @@ function addNoteFromSelection() {
         cancelLineDraft();
     }
     elements.eraserMode.checked = false;
-    elements.editMode.checked = true;
     saveUiPrefs();
     updateAnnotationControls();
     flashStatus('文本框工具：点击 PDF 页面放置，再点“笔记”或按 Esc 退出');
@@ -4129,7 +4084,6 @@ function loadUiPrefs() {
         return {
             autoTranslate: typeof parsed.autoTranslate === 'boolean' ? parsed.autoTranslate : true,
             autoExplain: typeof parsed.autoExplain === 'boolean' ? parsed.autoExplain : true,
-            editMode: false,
             lineMode: false,
             eraserMode: false,
             visualSelectionStyle: parsed.visualSelectionStyle === VISUAL_SELECTION_STYLE_BOX
@@ -4160,7 +4114,6 @@ function loadUiPrefs() {
         return {
             autoTranslate: true,
             autoExplain: true,
-            editMode: false,
             lineMode: false,
             eraserMode: false,
             visualSelectionStyle: VISUAL_SELECTION_STYLE_PATH,
@@ -4177,7 +4130,6 @@ function loadUiPrefs() {
 function applyUiPrefs() {
     elements.autoTranslate.checked = state.uiPrefs.autoTranslate !== false;
     elements.autoExplain.checked = state.uiPrefs.autoExplain !== false;
-    elements.editMode.checked = state.uiPrefs.editMode === true;
     elements.lineMode.checked = state.uiPrefs.lineMode === true;
     elements.eraserMode.checked = state.uiPrefs.eraserMode === true;
     elements.visualSelectionStyle.value = state.uiPrefs.visualSelectionStyle === VISUAL_SELECTION_STYLE_BOX
@@ -4223,7 +4175,6 @@ function saveUiPrefs() {
     state.uiPrefs = {
         autoTranslate: elements.autoTranslate.checked,
         autoExplain: elements.autoExplain.checked,
-        editMode: elements.editMode.checked,
         lineMode: elements.lineMode.checked,
         eraserMode: elements.eraserMode.checked,
         visualSelectionStyle: visualSelectionStyle(),

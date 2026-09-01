@@ -456,10 +456,6 @@ button:focus-visible {
     background: rgba(255, 255, 255, 0.86);
 }
 
-.annotation-group {
-    padding-right: 10px;
-}
-
 .annotation-ribbon {
     display: flex;
     align-items: center;
@@ -472,10 +468,6 @@ button:focus-visible {
     scrollbar-gutter: stable;
     scrollbar-color: rgba(100, 113, 132, 0.42) transparent;
     scrollbar-width: thin;
-}
-
-.annotation-ribbon[hidden] {
-    display: none;
 }
 
 .annotation-ribbon::-webkit-scrollbar {
