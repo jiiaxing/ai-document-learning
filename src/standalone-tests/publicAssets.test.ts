@@ -107,16 +107,24 @@ test('front-end supports wheel and keyboard page navigation', () => {
 });
 
 test('front-end supports visible PDF reader scrollbars and direct page jumping', () => {
+    const toolbarHtml = indexHtml.slice(indexHtml.indexOf('<section class="file-toolbar">'), indexHtml.indexOf('<main id="appShell"'));
+    const readerPaneHtml = indexHtml.slice(indexHtml.indexOf('<section class="reader-pane">'));
+
     assert.ok(indexHtml.includes('id="pageJumpInput"'));
-    assert.ok(indexHtml.includes('id="pageJumpButton"'));
+    assert.equal(indexHtml.includes('id="pageJumpButton"'), false);
     assert.ok(indexHtml.includes('id="pageSlider"'));
+    assert.equal(toolbarHtml.includes('id="pageJumpInput"'), false);
+    assert.ok(readerPaneHtml.includes('class="reader-footer"'));
     assert.ok(appJs.includes('pageJumpInput: document.getElementById'));
+    assert.ok(appJs.includes("elements.pageJumpInput.addEventListener('input', onPageJumpInput)"));
+    assert.ok(appJs.includes('function onPageJumpInput'));
     assert.ok(appJs.includes('jumpToTypedPage'));
     assert.ok(appJs.includes('onPageSliderChange'));
     assert.ok(appJs.includes("gotoPage(targetPage, { trigger, scroll: 'top' })"));
     assert.ok(appJs.includes("logClient('pdf.page.jump_ignored'"));
     assert.ok(stylesCss.includes('.viewer::-webkit-scrollbar'));
     assert.ok(stylesCss.includes('scrollbar-gutter: stable both-edges'));
+    assert.ok(stylesCss.includes('.reader-footer'));
     assert.ok(stylesCss.includes('.page-slider'));
 });
 

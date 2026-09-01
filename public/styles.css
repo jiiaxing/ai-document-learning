@@ -257,21 +257,32 @@ button:focus-visible {
 }
 
 .file-toolbar {
-    min-height: 54px;
+    min-height: 46px;
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 10px;
-    padding: 8px 14px;
+    gap: 8px;
+    padding: 6px 12px;
     border-bottom: 1px solid var(--line);
     background: var(--surface-3);
     overflow-x: auto;
     scrollbar-gutter: stable;
-    scrollbar-width: none;
+    scrollbar-color: rgba(100, 113, 132, 0.42) transparent;
+    scrollbar-width: thin;
 }
 
 .file-toolbar::-webkit-scrollbar {
-    display: none;
+    height: 8px;
+}
+
+.file-toolbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.file-toolbar::-webkit-scrollbar-thumb {
+    border: 2px solid var(--surface-3);
+    border-radius: 999px;
+    background: rgba(100, 113, 132, 0.42);
 }
 
 .toolbar-group {
@@ -279,10 +290,10 @@ button:focus-visible {
     flex: 0 0 auto;
     align-items: center;
     gap: 5px;
-    min-height: 38px;
-    padding: 4px 6px;
+    min-height: 34px;
+    padding: 3px 5px;
     border: 1px solid rgba(216, 222, 231, 0.9);
-    border-radius: 8px;
+    border-radius: 6px;
     background: rgba(255, 255, 255, 0.86);
 }
 
@@ -372,12 +383,12 @@ button:focus-visible {
 }
 
 .page-jump-input {
-    width: 72px;
+    width: 64px;
     text-align: center;
 }
 
 .page-slider {
-    width: clamp(96px, 11vw, 180px);
+    width: clamp(160px, 24vw, 360px);
     accent-color: var(--accent);
 }
 
@@ -458,6 +469,11 @@ button:focus-visible {
 .reader-pane {
     grid-column: 3;
     grid-row: 1;
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow: hidden;
 }
 
 .right-resizer {
@@ -686,14 +702,8 @@ button:focus-visible {
     font-weight: 700;
 }
 
-.reader-pane {
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-}
-
 .viewer {
-    height: 100%;
+    min-height: 0;
     overflow: scroll;
     display: grid;
     place-items: start center;
@@ -706,6 +716,48 @@ button:focus-visible {
         linear-gradient(0deg, rgba(31, 122, 91, 0.05) 1px, transparent 1px),
         var(--surface-2);
     background-size: 24px 24px;
+}
+
+.reader-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 54px;
+    padding: 9px 14px;
+    border-top: 1px solid var(--line);
+    background: rgba(248, 250, 252, 0.96);
+    box-shadow: 0 -8px 22px rgba(15, 23, 42, 0.06);
+}
+
+.page-number-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 112px;
+    height: 34px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+}
+
+.reader-footer .page-jump-input {
+    width: 50px;
+    height: 26px;
+    padding: 0 4px;
+    border-color: transparent;
+    background: transparent;
+    font-weight: 700;
+}
+
+.reader-footer .page-jump-input:focus {
+    outline-offset: 0;
+}
+
+.reader-footer .page-info {
+    min-width: 40px;
+    text-align: left;
 }
 
 .viewer::-webkit-scrollbar {
@@ -1163,12 +1215,12 @@ button:focus-visible {
     }
 
     .file-toolbar {
-        flex-wrap: wrap;
-        overflow-x: visible;
+        flex-wrap: nowrap;
+        overflow-x: auto;
     }
 
     .toolbar-group {
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
     }
 
     .app-shell {
@@ -1198,5 +1250,14 @@ button:focus-visible {
         border-left: 0;
         border-right: 0;
         border-bottom: 1px solid var(--line);
+    }
+
+    .reader-footer {
+        justify-content: flex-start;
+        overflow-x: auto;
+    }
+
+    .page-slider {
+        width: clamp(120px, 44vw, 240px);
     }
 }

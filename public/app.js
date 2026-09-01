@@ -125,7 +125,6 @@ const elements = {
     explainPage: document.getElementById('explainPage'),
     translatePage: document.getElementById('translatePage'),
     pageJumpInput: document.getElementById('pageJumpInput'),
-    pageJumpButton: document.getElementById('pageJumpButton'),
     pageSlider: document.getElementById('pageSlider'),
     readerMode: document.getElementById('readerMode'),
     zoomOut: document.getElementById('zoomOut'),
@@ -198,6 +197,7 @@ const state = {
     noteDrag: null,
     paneResize: null,
     lastPageTurnAt: 0,
+    pageJumpTimer: 0,
     renderLock: false,
     selectionTimer: 0,
     translationAbort: null,
@@ -250,7 +250,7 @@ function wireEvents() {
     elements.nextPage.addEventListener('click', () => gotoPage(state.currentPage + 1));
     elements.explainPage.addEventListener('click', () => void explainCurrentPage());
     elements.translatePage.addEventListener('click', () => void translateCurrentPage());
-    elements.pageJumpButton.addEventListener('click', jumpToTypedPage);
+    elements.pageJumpInput.addEventListener('input', onPageJumpInput);
     elements.pageJumpInput.addEventListener('keydown', onPageJumpKeydown);
     elements.pageSlider.addEventListener('input', onPageSliderInput);
     elements.pageSlider.addEventListener('change', onPageSliderChange);
@@ -893,12 +893,22 @@ function scrollToPage(pageNumber, align = 'top') {
     elements.viewer.scrollTop = align === 'bottom' ? Math.max(0, bottom) : Math.max(0, top);
 }
 
-async function jumpToTypedPage() {
+function onPageJumpInput() {
+    window.clearTimeout(state.pageJumpTimer);
+    if (!state.pdfDoc || !elements.pageJumpInput.value.trim()) {
+        return;
+    }
+    state.pageJumpTimer = window.setTimeout(() => {
+        void jumpToTypedPage('page-input');
+    }, 320);
+}
+
+async function jumpToTypedPage(trigger = 'page-input') {
     if (!state.pdfDoc) {
         return;
     }
 
-    const requested = Number(elements.pageJumpInput.value);
+    const requested = Number(elements.pageJumpInput.value.trim());
     if (!Number.isFinite(requested)) {
         flashStatus('请输入页码');
         elements.pageJumpInput.focus();
@@ -906,7 +916,7 @@ async function jumpToTypedPage() {
         return;
     }
 
-    await jumpToPageNumber(requested, 'page-jump');
+    await jumpToPageNumber(requested, trigger);
 }
 
 function onPageJumpKeydown(event) {
@@ -914,7 +924,8 @@ function onPageJumpKeydown(event) {
         return;
     }
     event.preventDefault();
-    void jumpToTypedPage();
+    window.clearTimeout(state.pageJumpTimer);
+    void jumpToTypedPage('page-input-enter');
 }
 
 function onPageSliderInput() {
@@ -953,7 +964,9 @@ async function jumpToPageNumber(pageNumber, trigger) {
     const targetPage = Math.max(1, Math.min(state.pdfDoc.numPages, Math.round(pageNumber)));
     if (targetPage === state.currentPage) {
         updateToolbar();
-        flashStatus(`已在第 ${state.currentPage} 页`);
+        if (trigger !== 'page-input') {
+            flashStatus(`已在第 ${state.currentPage} 页`);
+        }
         logClient('pdf.page.jump_ignored', { reason: 'same-page', page: state.currentPage, trigger });
         return;
     }
@@ -3276,11 +3289,10 @@ function setTranslationError(message) {
 
 function updateToolbar() {
     const pages = state.pdfDoc?.numPages || 0;
-    elements.pageInfo.textContent = pages ? `${state.currentPage} / ${pages}` : '- / -';
+    elements.pageInfo.textContent = pages ? `/ ${pages}` : '/ -';
     elements.pageJumpInput.disabled = !pages;
     elements.pageJumpInput.max = pages ? String(pages) : '';
     elements.pageJumpInput.value = pages ? String(state.currentPage) : '';
-    elements.pageJumpButton.disabled = !pages;
     elements.pageSlider.disabled = !pages;
     elements.pageSlider.max = pages ? String(pages) : '1';
     elements.pageSlider.value = pages ? String(state.currentPage) : '1';
