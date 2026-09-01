@@ -117,7 +117,14 @@ const elements = {
     followupPromptTemplate: document.getElementById('followupPromptTemplate'),
     settingsForm: document.getElementById('settingsForm'),
     settingsStatus: document.getElementById('settingsStatus'),
-    openPdf: document.getElementById('openPdf'),
+    filePanelToggle: document.getElementById('filePanelToggle'),
+    filePanelBackdrop: document.getElementById('filePanelBackdrop'),
+    filePanel: document.getElementById('filePanel'),
+    filePanelBack: document.getElementById('filePanelBack'),
+    importReadingFile: document.getElementById('importReadingFile'),
+    readingFileList: document.getElementById('readingFileList'),
+    readingFileContextMenu: document.getElementById('readingFileContextMenu'),
+    deleteReadingFile: document.getElementById('deleteReadingFile'),
     pdfInput: document.getElementById('pdfInput'),
     annotationToggle: document.getElementById('annotationToggle'),
     annotationRibbon: document.getElementById('annotationRibbon'),
@@ -180,6 +187,10 @@ const state = {
     pageTextCache: new Map(),
     annotations: loadAnnotations(),
     annotationDocKey: '',
+    readingFiles: [],
+    activeReadingFileId: '',
+    readingFileMenuId: '',
+    readingFilePanelMessage: '',
     pendingAnnotationSelection: null,
     selectionActionsSnapshot: null,
     visualSelection: null,
@@ -195,6 +206,8 @@ const state = {
     pageJumpTimer: 0,
     renderLock: false,
     selectionTimer: 0,
+    annotationSaveTimer: 0,
+    pendingAnnotationSave: null,
     translationAbort: null,
     explainAbort: null,
     activeAssistantNode: null,
@@ -217,6 +230,7 @@ async function boot() {
         logClient('app.settings.loaded', publicSettingsLog(state.settings));
         state.pdfjsLib = await import(PDFJS_URL);
         state.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+        await loadReadingFiles();
         updateToolbar();
         setBusy(false, providerLabel());
         await maybeOpenPdfFromQuery();
@@ -239,8 +253,14 @@ function wireEvents() {
     });
     elements.clearApiKey.addEventListener('change', updateApiKeyState);
     elements.protocol.addEventListener('change', updateProviderFields);
-    elements.openPdf.addEventListener('click', () => elements.pdfInput.click());
-    elements.pdfInput.addEventListener('change', onPdfPicked);
+    elements.filePanelToggle.addEventListener('click', () => setFilePanelOpen(true));
+    elements.filePanelBack.addEventListener('click', () => setFilePanelOpen(false));
+    elements.filePanelBackdrop.addEventListener('click', () => setFilePanelOpen(false));
+    elements.importReadingFile.addEventListener('click', () => elements.pdfInput.click());
+    elements.pdfInput.addEventListener('change', onReadingFilePicked);
+    elements.readingFileList.addEventListener('click', onReadingFileListClick);
+    elements.readingFileList.addEventListener('contextmenu', onReadingFileContextMenu);
+    elements.deleteReadingFile.addEventListener('click', deleteReadingFileFromContextMenu);
     elements.annotationToggle.addEventListener('click', toggleAnnotationRibbon);
     elements.prevPage.addEventListener('click', () => gotoPage(state.currentPage - 1));
     elements.nextPage.addEventListener('click', () => gotoPage(state.currentPage + 1));
@@ -303,6 +323,7 @@ function wireEvents() {
     elements.imageInput.addEventListener('change', onImagesPicked);
     elements.imageAttachments.addEventListener('click', onImageAttachmentClick);
     elements.questionInput.addEventListener('paste', onQuestionPaste);
+    document.addEventListener('pointerdown', onReadingFileDocumentPointerDown, true);
     document.addEventListener('mouseup', () => queueTextSelectionProbe('mouseup'), true);
 }
 
@@ -659,25 +680,257 @@ function setApiKeyState(message, tone) {
     elements.apiKeyState.classList.toggle('is-warning', tone === 'warning');
 }
 
-async function onPdfPicked(event) {
+function setFilePanelOpen(open) {
+    elements.filePanel.hidden = !open;
+    elements.filePanelBackdrop.hidden = !open;
+    elements.filePanelToggle.setAttribute('aria-expanded', String(open));
+    elements.filePanelToggle.classList.toggle('active-tool', open);
+    hideReadingFileContextMenu();
+    if (open) {
+        void loadReadingFiles();
+    }
+}
+
+async function loadReadingFiles() {
+    try {
+        const payload = await getJson('/api/reading-files');
+        state.readingFiles = parseReadingFiles(payload.files);
+        state.readingFilePanelMessage = '';
+        renderReadingFileList();
+        logClient('reading_file.list.loaded', { count: state.readingFiles.length });
+    } catch (error) {
+        showReadingFilePanelMessage(`阅读文件加载失败：${messageOf(error)}`);
+        logClient('reading_file.list.error', { message: messageOf(error) });
+    }
+}
+
+function parseReadingFiles(value) {
+    return Array.isArray(value)
+        ? value
+            .map(parseReadingFile)
+            .filter(Boolean)
+        : [];
+}
+
+function parseReadingFile(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+    const id = typeof value.id === 'string' ? value.id : '';
+    const title = typeof value.title === 'string' ? value.title : '';
+    const updatedAt = typeof value.updatedAt === 'string' ? value.updatedAt : '';
+    return id && title ? { id, title, updatedAt } : null;
+}
+
+function renderReadingFileList(emptyMessage = '暂无阅读文件') {
+    elements.readingFileList.innerHTML = '';
+    const message = state.readingFilePanelMessage || (!state.readingFiles.length ? emptyMessage : '');
+    if (message) {
+        const messageNode = document.createElement('div');
+        messageNode.className = 'reading-file-message';
+        messageNode.textContent = message;
+        elements.readingFileList.appendChild(messageNode);
+    }
+
+    if (state.readingFiles.length === 0) {
+        return;
+    }
+
+    state.readingFiles.forEach((file) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'reading-file-item';
+        item.dataset.id = file.id;
+        item.setAttribute('role', 'listitem');
+        item.setAttribute('aria-current', String(state.activeReadingFileId === file.id));
+
+        const title = document.createElement('span');
+        title.className = 'reading-file-title';
+        title.textContent = file.title;
+        const time = document.createElement('time');
+        time.className = 'reading-file-time';
+        time.dateTime = file.updatedAt || '';
+        time.textContent = formatReadingFileTime(file.updatedAt);
+
+        item.append(title, time);
+        elements.readingFileList.appendChild(item);
+    });
+}
+
+function showReadingFilePanelMessage(message) {
+    state.readingFilePanelMessage = message;
+    renderReadingFileList('');
+}
+
+async function onReadingFilePicked(event) {
     const file = event.target.files?.[0];
     if (!file) {
         return;
     }
 
     if (!state.pdfjsLib) {
-        appendMessage('assistant', 'PDF 渲染器尚未加载完成。');
+        showReadingFilePanelMessage('PDF 渲染器尚未加载完成');
         return;
     }
 
-    setBusy(true, '打开 PDF');
-    logClient('pdf.open.start', { name: file.name, size: file.size });
+    setBusy(true, '导入 PDF');
+    state.readingFilePanelMessage = '';
+    renderReadingFileList();
+    logClient('reading_file.import.start', { name: file.name, size: file.size });
     try {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        await loadPdfBytes(bytes, file.name);
+        await flushPendingAnnotationSave();
+        const dataBase64 = await readFileAsDataUrl(file);
+        const response = await fetch('/api/reading-files/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: file.name,
+                dataBase64
+            })
+        });
+        const payload = await readJsonResponse(response);
+        const importedFile = parseReadingFile(payload.file);
+        if (!importedFile) {
+            throw new Error('Invalid import response.');
+        }
+        upsertReadingFile(importedFile);
+        await openReadingFileById(importedFile.id);
+        logClient('reading_file.import.done', { id: importedFile.id, title: importedFile.title });
     } catch (error) {
-        appendMessage('assistant', `PDF 打开失败：${messageOf(error)}`);
-        logClient('pdf.open.error', { message: messageOf(error) });
+        showReadingFilePanelMessage(`PDF 导入失败：${messageOf(error)}`);
+        logClient('reading_file.import.error', { message: messageOf(error) });
+    } finally {
+        elements.pdfInput.value = '';
+        setBusy(false);
+        updateToolbar();
+    }
+}
+
+function onReadingFileListClick(event) {
+    const item = readingFileItemFromEvent(event);
+    if (!item) {
+        return;
+    }
+    hideReadingFileContextMenu();
+    void openReadingFileById(item.dataset.id || '');
+}
+
+function onReadingFileContextMenu(event) {
+    const item = readingFileItemFromEvent(event);
+    if (!item) {
+        return;
+    }
+
+    event.preventDefault();
+    state.readingFileMenuId = item.dataset.id || '';
+    elements.readingFileList.querySelectorAll('.reading-file-item').forEach((node) => {
+        node.classList.toggle('is-menu-open', node === item);
+    });
+
+    const contentRect = elements.readingFileContextMenu.parentElement.getBoundingClientRect();
+    const left = clamp(event.clientX - contentRect.left, 8, Math.max(8, contentRect.width - 110));
+    const top = clamp(event.clientY - contentRect.top, 8, Math.max(8, contentRect.height - 46));
+    elements.readingFileContextMenu.style.left = `${left}px`;
+    elements.readingFileContextMenu.style.top = `${top}px`;
+    elements.readingFileContextMenu.hidden = false;
+    logClient('reading_file.context_menu', { id: state.readingFileMenuId });
+}
+
+function onReadingFileDocumentPointerDown(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+        return;
+    }
+    if (target.closest('.reading-file-context-menu') || target.closest('.reading-file-item')) {
+        return;
+    }
+    hideReadingFileContextMenu();
+}
+
+async function deleteReadingFileFromContextMenu() {
+    const id = state.readingFileMenuId;
+    const file = state.readingFiles.find((entry) => entry.id === id);
+    if (!id || !file) {
+        hideReadingFileContextMenu();
+        return;
+    }
+
+    if (!window.confirm(`删除“${file.title}”？`)) {
+        hideReadingFileContextMenu();
+        return;
+    }
+
+    setBusy(true, '删除阅读文件');
+    try {
+        await flushPendingAnnotationSave();
+        const response = await fetch(`/api/reading-files/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        await readJsonResponse(response);
+        state.readingFiles = state.readingFiles.filter((entry) => entry.id !== id);
+        if (state.activeReadingFileId === id) {
+            resetReaderDocument();
+        }
+        hideReadingFileContextMenu();
+        renderReadingFileList();
+        flashStatus('已删除阅读文件');
+        logClient('reading_file.delete.done', { id, title: file.title });
+    } catch (error) {
+        showReadingFilePanelMessage(`阅读文件删除失败：${messageOf(error)}`);
+        logClient('reading_file.delete.error', { id, message: messageOf(error) });
+    } finally {
+        setBusy(false);
+    }
+}
+
+function hideReadingFileContextMenu() {
+    state.readingFileMenuId = '';
+    elements.readingFileContextMenu.hidden = true;
+    elements.readingFileList.querySelectorAll('.reading-file-item').forEach((node) => {
+        node.classList.remove('is-menu-open');
+    });
+}
+
+function readingFileItemFromEvent(event) {
+    return event.target instanceof Element ? event.target.closest('.reading-file-item') : null;
+}
+
+async function openReadingFileById(id) {
+    const readingFileId = String(id || '').trim();
+    if (!readingFileId) {
+        return;
+    }
+
+    if (!state.pdfjsLib) {
+        showReadingFilePanelMessage('PDF 渲染器尚未加载完成');
+        return;
+    }
+
+    const file = state.readingFiles.find((entry) => entry.id === readingFileId) || {
+        id: readingFileId,
+        title: 'PDF',
+        updatedAt: ''
+    };
+    setBusy(true, '打开阅读文件');
+    logClient('reading_file.open.start', { id: readingFileId, title: file.title });
+    try {
+        await flushPendingAnnotationSave();
+        const [pdfResponse, notesResponse] = await Promise.all([
+            fetch(`/reading-files/${encodeURIComponent(readingFileId)}/source.pdf`),
+            fetch(`/api/reading-files/${encodeURIComponent(readingFileId)}/notes`)
+        ]);
+        if (!pdfResponse.ok) {
+            throw new Error(`HTTP ${pdfResponse.status}`);
+        }
+        const notesPayload = notesResponse.ok ? await notesResponse.json() : { notes: {} };
+        await loadPdfBytes(new Uint8Array(await pdfResponse.arrayBuffer()), file.title, {
+            readingFileId,
+            annotations: isPlainObject(notesPayload.notes) ? notesPayload.notes : {}
+        });
+        setFilePanelOpen(false);
+        renderReadingFileList();
+        logClient('reading_file.open.done', { id: readingFileId, title: file.title });
+    } catch (error) {
+        showReadingFilePanelMessage(`阅读文件打开失败：${messageOf(error)}`);
+        logClient('reading_file.open.error', { id: readingFileId, message: messageOf(error) });
     } finally {
         setBusy(false);
         updateToolbar();
@@ -698,6 +951,7 @@ async function openWorkspacePdfByName(name) {
     setBusy(true, '打开 PDF');
     logClient('workspace_pdf.open.start', { name: pdfName });
     try {
+        await flushPendingAnnotationSave();
         const response = await fetch(`/local-pdfs/${encodeURIComponent(pdfName)}`);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
@@ -714,6 +968,12 @@ async function openWorkspacePdfByName(name) {
 
 async function maybeOpenPdfFromQuery() {
     const query = new URLSearchParams(window.location.search);
+    const readingFileId = query.get('file');
+    if (readingFileId) {
+        await openReadingFileById(readingFileId);
+        return;
+    }
+
     const name = query.get('pdf');
     if (!name) {
         return;
@@ -721,14 +981,20 @@ async function maybeOpenPdfFromQuery() {
     await openWorkspacePdfByName(name);
 }
 
-async function loadPdfBytes(bytes, name) {
+async function loadPdfBytes(bytes, name, options = {}) {
     state.pdfDoc = await state.pdfjsLib.getDocument({ data: bytes }).promise;
     state.fileName = name;
     state.currentPage = 1;
     state.lastSelection = '';
     state.explainHistory = [];
     state.pageTextCache.clear();
-    state.annotationDocKey = annotationKeyFor(name, state.pdfDoc.numPages);
+    state.activeReadingFileId = typeof options.readingFileId === 'string' ? options.readingFileId : '';
+    state.annotationDocKey = state.activeReadingFileId
+        ? `readingFile:${state.activeReadingFileId}`
+        : annotationKeyFor(name, state.pdfDoc.numPages);
+    if (state.activeReadingFileId) {
+        state.annotations[state.annotationDocKey] = isPlainObject(options.annotations) ? options.annotations : {};
+    }
     state.pendingAnnotationSelection = null;
     hideSelectionActions('pdf-open');
     state.notePlacementMode = false;
@@ -749,6 +1015,33 @@ async function loadPdfBytes(bytes, name) {
     clearConversation();
     await renderPage();
     logClient('pdf.open.done', { name, pages: state.pdfDoc.numPages });
+}
+
+function resetReaderDocument() {
+    state.pdfDoc = null;
+    state.currentPage = 1;
+    state.fileName = '';
+    state.activeReadingFileId = '';
+    state.annotationDocKey = '';
+    state.pageTextCache.clear();
+    state.pendingAnnotationSelection = null;
+    state.selectionActionsSnapshot = null;
+    state.visualSelection = null;
+    state.visualSelectionDraft = null;
+    state.notePlacementMode = false;
+    state.selectedAnnotationId = '';
+    state.editingNoteId = '';
+    state.lineDraft = null;
+    state.noteDrag = null;
+    selectionGate.reset();
+    hideSelectionActions('reading-file-delete');
+    clearVisualSelection('reading-file-delete');
+    elements.page.innerHTML = '';
+    elements.page.hidden = true;
+    elements.emptyState.hidden = false;
+    clearTranslation();
+    clearConversation();
+    updateToolbar();
 }
 
 async function renderPage(options = {}) {
@@ -3850,6 +4143,37 @@ function readerMode() {
     return elements.readerMode?.value === READER_MODE_CONTINUOUS ? READER_MODE_CONTINUOUS : READER_MODE_SINGLE;
 }
 
+function upsertReadingFile(file) {
+    state.readingFiles = [
+        file,
+        ...state.readingFiles.filter((entry) => entry.id !== file.id)
+    ].sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')));
+    renderReadingFileList();
+}
+
+function formatReadingFileTime(value) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) {
+        return '';
+    }
+    return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise((resolveRead, rejectRead) => {
+        const reader = new FileReader();
+        reader.addEventListener('load', () => resolveRead(String(reader.result || '')));
+        reader.addEventListener('error', () => rejectRead(reader.error || new Error('File read failed.')));
+        reader.readAsDataURL(file);
+    });
+}
+
 function loadAnnotations() {
     try {
         const parsed = JSON.parse(localStorage.getItem(ANNOTATION_STORE_KEY) || '{}');
@@ -3860,10 +4184,51 @@ function loadAnnotations() {
 }
 
 function saveAnnotations() {
+    if (state.activeReadingFileId) {
+        const notes = state.annotationDocKey ? state.annotations[state.annotationDocKey] || {} : {};
+        queueReadingFileNotesSave(state.activeReadingFileId, notes);
+        return;
+    }
+
     try {
         localStorage.setItem(ANNOTATION_STORE_KEY, JSON.stringify(state.annotations));
     } catch (error) {
         logClient('annotation.save.error', { message: messageOf(error) });
+    }
+}
+
+function queueReadingFileNotesSave(id, notes) {
+    window.clearTimeout(state.annotationSaveTimer);
+    state.pendingAnnotationSave = { id, notes };
+    state.annotationSaveTimer = window.setTimeout(() => {
+        void flushPendingAnnotationSave();
+    }, 260);
+}
+
+async function flushPendingAnnotationSave() {
+    window.clearTimeout(state.annotationSaveTimer);
+    state.annotationSaveTimer = 0;
+    const pending = state.pendingAnnotationSave;
+    if (!pending) {
+        return;
+    }
+    state.pendingAnnotationSave = null;
+
+    try {
+        const response = await fetch(`/api/reading-files/${encodeURIComponent(pending.id)}/notes`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes: pending.notes })
+        });
+        const payload = await readJsonResponse(response);
+        const file = parseReadingFile(payload.file);
+        if (file) {
+            upsertReadingFile(file);
+        }
+        logClient('reading_file.notes.saved', { id: pending.id });
+    } catch (error) {
+        flashStatus('批注保存失败');
+        logClient('reading_file.notes.save_error', { id: pending.id, message: messageOf(error) });
     }
 }
 
@@ -3892,10 +4257,24 @@ function providerLabel() {
 
 async function getJson(url) {
     const response = await fetch(url);
+    return readJsonResponse(response);
+}
+
+async function readJsonResponse(response) {
     if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        let detail = '';
+        try {
+            detail = String((await response.json()).error || '');
+        } catch {
+            detail = '';
+        }
+        throw new Error(detail || `HTTP ${response.status}`);
     }
     return response.json();
+}
+
+function isPlainObject(value) {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function logClient(event, data = {}) {

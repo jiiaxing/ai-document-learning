@@ -156,6 +156,45 @@ test('front-end supports visible PDF reader scrollbars and direct page jumping',
     assert.ok(stylesCss.includes('.page-slider'));
 });
 
+test('front-end uses a minimal reading file panel for imports and document list', () => {
+    const topChromeHtml = indexHtml.slice(indexHtml.indexOf('<header class="top-chrome">'), indexHtml.indexOf('<main id="appShell"'));
+    const filePanelHtml = indexHtml.slice(indexHtml.indexOf('<section id="filePanel"'), indexHtml.indexOf('</section>', indexHtml.indexOf('<section id="filePanel"')) + '</section>'.length);
+    const navHtml = indexHtml.slice(indexHtml.indexOf('<nav class="file-panel-nav"'), indexHtml.indexOf('</nav>', indexHtml.indexOf('<nav class="file-panel-nav"')) + '</nav>'.length);
+    const navButtonCount = (navHtml.match(/<button /g) || []).length;
+
+    assert.ok(indexHtml.includes('id="filePanelToggle"'));
+    assert.ok(topChromeHtml.includes('>文件</button>'));
+    assert.equal(indexHtml.includes('id="openPdf"'), false);
+    assert.equal(indexHtml.includes('打开 PDF</button>'), false);
+    assert.ok(filePanelHtml.includes('id="filePanelBack"'));
+    assert.ok(filePanelHtml.includes('id="importReadingFile"'));
+    assert.ok(filePanelHtml.includes('id="readingFileList"'));
+    assert.ok(filePanelHtml.includes('id="readingFileContextMenu"'));
+    assert.ok(filePanelHtml.includes('id="deleteReadingFile"'));
+    assert.equal(navButtonCount, 2);
+    assert.equal(filePanelHtml.includes('搜索'), false);
+    assert.equal(filePanelHtml.includes('新建'), false);
+    assert.equal(filePanelHtml.includes('分享'), false);
+    assert.ok(appJs.includes("elements.filePanelToggle.addEventListener('click', () => setFilePanelOpen(true))"));
+    assert.ok(appJs.includes("elements.importReadingFile.addEventListener('click', () => elements.pdfInput.click())"));
+    assert.ok(appJs.includes("elements.readingFileList.addEventListener('contextmenu', onReadingFileContextMenu)"));
+    assert.ok(appJs.includes('function deleteReadingFileFromContextMenu'));
+    assert.ok(appJs.includes('function showReadingFilePanelMessage'));
+    assert.ok(appJs.includes("fetch('/api/reading-files/import'"));
+    assert.ok(appJs.includes("fetch(`/api/reading-files/${encodeURIComponent(id)}`, { method: 'DELETE' })"));
+    assert.ok(appJs.includes('reading-file-title'));
+    assert.ok(appJs.includes('reading-file-time'));
+    assert.ok(appJs.includes('reading-file-message'));
+    assert.equal(appJs.includes("appendMessage('assistant', `PDF 导入失败"), false);
+    assert.equal(appJs.includes("appendMessage('assistant', `阅读文件打开失败"), false);
+    assert.equal(appJs.includes("appendMessage('assistant', `阅读文件删除失败"), false);
+    assert.ok(stylesCss.includes('.file-panel'));
+    assert.ok(stylesCss.includes('.file-panel-nav'));
+    assert.ok(stylesCss.includes('.reading-file-item'));
+    assert.ok(stylesCss.includes('.reading-file-message'));
+    assert.ok(stylesCss.includes('.reading-file-context-menu'));
+});
+
 test('front-end keeps zoom lightweight through Ctrl wheel', () => {
     assert.ok(appJs.includes('const MIN_SCALE = 0.05'));
     assert.ok(appJs.includes('const MAX_SCALE = 5.0'));
@@ -222,6 +261,8 @@ test('front-end exposes local PDF annotation tools', () => {
     assert.ok(appJs.includes('addNoteFromSelection'));
     assert.ok(appJs.includes('renderAnnotationsForPage'));
     assert.ok(appJs.includes('localStorage.setItem(ANNOTATION_STORE_KEY'));
+    assert.ok(appJs.includes('queueReadingFileNotesSave(state.activeReadingFileId, notes)'));
+    assert.ok(appJs.includes("fetch(`/api/reading-files/${encodeURIComponent(pending.id)}/notes`"));
 });
 
 test('front-end supports manual text translation without PDF selection', () => {

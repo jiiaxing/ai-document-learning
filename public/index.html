@@ -125,11 +125,25 @@
         </details>
     </form>
 
+    <div id="filePanelBackdrop" class="file-panel-backdrop" hidden></div>
+    <section id="filePanel" class="file-panel" aria-label="文件" hidden>
+        <nav class="file-panel-nav" aria-label="文件操作">
+            <button id="filePanelBack" type="button">返回</button>
+            <button id="importReadingFile" class="primary" type="button">导入</button>
+            <input id="pdfInput" type="file" accept="application/pdf,.pdf" hidden />
+        </nav>
+        <div class="file-panel-content">
+            <div id="readingFileList" class="reading-file-list" role="list"></div>
+            <div id="readingFileContextMenu" class="reading-file-context-menu" hidden>
+                <button id="deleteReadingFile" type="button">删除</button>
+            </div>
+        </div>
+    </section>
+
     <header class="top-chrome">
         <section class="file-toolbar">
             <div class="toolbar-group file-group">
-                <button id="openPdf" class="primary" type="button">打开 PDF</button>
-                <input id="pdfInput" type="file" accept="application/pdf,.pdf" hidden />
+                <button id="filePanelToggle" class="primary" type="button" aria-expanded="false" aria-controls="filePanel">文件</button>
             </div>
             <div class="toolbar-group ai-group">
                 <label class="inline-check" title="选中文本后自动填入翻译栏并翻译">
