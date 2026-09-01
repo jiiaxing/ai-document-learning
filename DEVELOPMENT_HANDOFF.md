@@ -6,7 +6,7 @@ Workspace: `D:\PDF_Reader - 副本\pdf-reader`
 
 ## Current Goal
 
-This repo has been refactored from a VS Code extension copy into a standalone AI PDF learning app.
+This repo is now a standalone AI PDF learning app. The old VS Code extension surface has been removed from the active project.
 
 The app should behave like a normal desktop PDF reader:
 
@@ -189,15 +189,7 @@ Local code now adds hints for this error, but it cannot fix upstream account ava
 
 ## Git/Repo State
 
-The working tree is intentionally heavily changed because the VS Code extension copy was converted into a standalone app. There are many deleted old extension files and many new standalone files.
-
-Do not blindly revert deleted files unless the user explicitly asks. The deletion of old VS Code extension files is part of the standalone-app direction.
-
-Representative `git status` shape:
-
-- Modified: `.gitignore`, `README.md`, `package.json`, `package-lock.json`, `tsconfig.json`, `src/core/openaiResponseUtils.ts`
-- Deleted old VS Code extension files, e.g. `src/extension.ts`, `src/pdfTutorPanel.ts`, old VS Code tests/docs.
-- New: `public/`, `src/standalone/`, `src/desktop/`, `src/standalone-tests/`, `scripts/`, `DESKTOP_PACKAGING.md`, `DEVELOPMENT_HANDOFF.md`.
+The project is tracked as a standalone Web/Electron app. VS Code extension launch settings, extension host configuration, and unused VS Code-specific TypeScript helpers have been removed from the active repository.
 
 ## User Preferences Captured
 

@@ -31,6 +31,7 @@ coverage/
 .nyc_output/
 
 # Editor and tool caches
+.vscode/
 .vscode-test/
 .codex-backups/
 .idea/
