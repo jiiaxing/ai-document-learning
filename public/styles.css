@@ -196,6 +196,20 @@ button:focus-visible {
     font-size: 12px;
 }
 
+.settings-bar label > .field-note {
+    min-height: 16px;
+    color: var(--muted);
+    line-height: 1.25;
+}
+
+.field-note.is-ready {
+    color: #166649;
+}
+
+.field-note.is-warning {
+    color: #9a3412;
+}
+
 .wide-field {
     grid-column: 1 / -1;
 }

@@ -62,6 +62,34 @@ test('config supports OpenAI and DeepSeek provider presets', () => {
     assert.equal(deepSeekConfig.provider.model, 'deepseek-v4-pro');
 });
 
+test('config lets explicit environment provider override saved provider presets', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'ai-pdf-tutor-'));
+    const configFile = join(tempDir, 'saved-settings.json');
+    try {
+        writeFileSync(configFile, JSON.stringify({
+            provider: {
+                preset: 'deepseek',
+                kind: 'openaiCompatible',
+                protocol: 'openai',
+                endpoint: 'https://api.deepseek.com/chat/completions',
+                model: 'deepseek-v4-pro',
+                apiKey: 'saved-secret'
+            }
+        }), 'utf8');
+
+        const config = loadConfig(tempDir, {
+            AI_TUTOR_CONFIG: configFile,
+            AI_TUTOR_PROVIDER: 'mock',
+            AI_TUTOR_LOG_FILE: join(tempDir, 'app.log')
+        });
+
+        assert.equal(config.provider.preset, 'mock');
+        assert.equal(config.provider.kind, 'mock');
+    } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
 test('config migrates legacy prompt defaults for contextual explanation', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ai-pdf-tutor-'));
     const configFile = join(tempDir, 'legacy-settings.json');
@@ -315,6 +343,57 @@ test('settings endpoint saves provider config without echoing API key', async ()
         assert.match(persistedText, /"apiKeyPrefix": "Bearer "/);
         assert.match(persistedText, /"port": 5178/);
         assert.equal(existsSync(join(tempDir, 'ai-tutor.config.json')), false);
+
+        const preserveResponse = await fetch(`http://127.0.0.1:${port}/api/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                provider: {
+                    preset: 'custom',
+                    kind: 'openaiCompatible',
+                    protocol: 'openai',
+                    endpoint: 'https://example.test/v1',
+                    model: 'unit-model-again',
+                    apiKey: ''
+                }
+            })
+        });
+
+        assert.equal(preserveResponse.status, 200);
+        const preservedSettings = await preserveResponse.json() as { provider: { apiKeyConfigured?: boolean; model?: string } };
+        assert.equal(preservedSettings.provider.apiKeyConfigured, true);
+        assert.equal(preservedSettings.provider.model, 'unit-model-again');
+
+        const reloadedConfig = loadConfig(tempDir, {
+            AI_TUTOR_CONFIG: configFile,
+            AI_TUTOR_LOG_FILE: logFile,
+            AI_TUTOR_PUBLIC_DIR: join(tempDir, 'public')
+        });
+        assert.equal(reloadedConfig.provider.apiKey, 'unit-secret');
+        assert.equal(reloadedConfig.provider.model, 'unit-model-again');
+
+        const switchResponse = await fetch(`http://127.0.0.1:${port}/api/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                provider: {
+                    preset: 'deepseek',
+                    kind: 'openaiCompatible',
+                    model: 'deepseek-v4-pro',
+                    apiKey: ''
+                }
+            })
+        });
+
+        assert.equal(switchResponse.status, 200);
+        const switchedSettings = await switchResponse.json() as { provider: { apiKeyConfigured?: boolean; preset?: string; endpoint?: string } };
+        assert.equal(switchedSettings.provider.preset, 'deepseek');
+        assert.equal(switchedSettings.provider.apiKeyConfigured, false);
+        assert.match(switchedSettings.provider.endpoint ?? '', /api\.deepseek\.com/);
+
+        const switchedText = readFileSync(configFile, 'utf8');
+        assert.doesNotMatch(switchedText, /unit-secret/);
+        assert.match(switchedText, /"preset": "deepseek"/);
     } finally {
         await closeServer(server);
         rmSync(tempDir, { recursive: true, force: true });

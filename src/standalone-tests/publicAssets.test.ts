@@ -33,7 +33,10 @@ test('front-end auto explain only probes selection after mouse release', () => {
 
 test('front-end only submits API keys typed in the current session', () => {
     assert.ok(appJs.includes('apiKeyTouched: false'));
+    assert.ok(indexHtml.includes('id="apiKeyState"'));
     assert.ok(appJs.includes("elements.apiKey.addEventListener('input'"));
+    assert.ok(appJs.includes('function updateApiKeyState'));
+    assert.ok(appJs.includes('切换服务商后需要输入对应 key'));
     assert.ok(appJs.includes('state.apiKeyTouched && elements.providerKind.value !=='));
     assert.ok(appJs.includes('state.apiKeyTouched = false'));
 });

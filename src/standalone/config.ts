@@ -97,8 +97,8 @@ export function loadConfig(cwd = process.cwd(), env = process.env): AppConfig {
         ?? ''
     );
     const rawPresetValue = env.AI_TUTOR_PROVIDER_PRESET
-        ?? fileConfig.provider?.preset
         ?? env.AI_TUTOR_PROVIDER
+        ?? fileConfig.provider?.preset
         ?? fileConfig.provider?.kind
         ?? '';
     const preset = resolveProviderPreset(rawPresetValue, env.AI_TUTOR_ENDPOINT ?? fileConfig.provider?.endpoint ?? '', apiKey);
@@ -187,12 +187,12 @@ export function publicSettingsFromConfig(config: AppConfig): PublicSettings {
 
 export function applySettingsUpdate(current: AppConfig, update: SettingsUpdate): AppConfig {
     const providerUpdate = update.provider ?? {};
+    const nextPreset = normalizeProviderPreset(providerUpdate.preset ?? providerUpdate.kind ?? current.provider.preset);
+    const providerChanged = nextPreset !== current.provider.preset;
+    const typedApiKey = typeof providerUpdate.apiKey === 'string' ? providerUpdate.apiKey.trim() : '';
     const nextApiKey = providerUpdate.clearApiKey
         ? ''
-        : (typeof providerUpdate.apiKey === 'string' && providerUpdate.apiKey.trim()
-            ? providerUpdate.apiKey.trim()
-            : current.provider.apiKey);
-    const nextPreset = normalizeProviderPreset(providerUpdate.preset ?? providerUpdate.kind ?? current.provider.preset);
+        : (typedApiKey || (providerChanged ? '' : current.provider.apiKey));
     const presetDefaults = providerDefaultsForPreset(nextPreset);
     const nextProtocol = normalizeProtocol(presetDefaults?.protocol ?? providerUpdate.protocol ?? current.provider.protocol);
     const nextEndpoint = normalizeEndpoint(nextProtocol, presetDefaults?.endpoint ?? providerUpdate.endpoint ?? current.provider.endpoint);

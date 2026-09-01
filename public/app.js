@@ -100,6 +100,7 @@ const elements = {
     endpoint: document.getElementById('endpoint'),
     model: document.getElementById('model'),
     apiKey: document.getElementById('apiKey'),
+    apiKeyState: document.getElementById('apiKeyState'),
     clearApiKey: document.getElementById('clearApiKey'),
     apiKeyHeader: document.getElementById('apiKeyHeader'),
     apiKeyPrefix: document.getElementById('apiKeyPrefix'),
@@ -241,7 +242,9 @@ function wireEvents() {
     elements.providerKind.addEventListener('change', onProviderKindChanged);
     elements.apiKey.addEventListener('input', () => {
         state.apiKeyTouched = true;
+        updateApiKeyState();
     });
+    elements.clearApiKey.addEventListener('change', updateApiKeyState);
     elements.protocol.addEventListener('change', updateProviderFields);
     elements.openPdf.addEventListener('click', () => elements.pdfInput.click());
     elements.pdfInput.addEventListener('change', onPdfPicked);
@@ -565,7 +568,7 @@ function applySettingsToForm(settings) {
     elements.explainPromptTemplate.value = settings.explainPromptTemplate;
     elements.translatePromptTemplate.value = settings.translatePromptTemplate;
     elements.followupPromptTemplate.value = settings.followupPromptTemplate;
-    elements.settingsStatus.textContent = settings.provider.apiKeyConfigured ? 'key 已配置' : '未配置 key，使用 mock';
+    elements.settingsStatus.textContent = settings.provider.apiKeyConfigured ? '已从本机加载设置，key 已配置' : '已从本机加载设置，当前无 key';
     updateProviderFields();
 }
 
@@ -620,6 +623,42 @@ function updateProviderFields() {
     elements.apiKeyHeader.disabled = isMock || isManagedPreset;
     elements.apiKeyPrefix.disabled = isMock || isManagedPreset;
     elements.responseTextPath.disabled = isMock || isManagedPreset;
+    updateApiKeyState();
+}
+
+function updateApiKeyState() {
+    const preset = elements.providerKind.value;
+    const savedPreset = state.settings?.provider ? providerPresetFromSettings(state.settings.provider) : '';
+    const hasSavedKey = Boolean(state.settings?.provider?.apiKeyConfigured);
+
+    if (preset === 'mock') {
+        setApiKeyState('Mock 模式不需要 key', 'muted');
+        return;
+    }
+    if (elements.clearApiKey.checked) {
+        setApiKeyState('保存后会清除已保存 key', 'warning');
+        return;
+    }
+    if (state.apiKeyTouched && elements.apiKey.value.trim()) {
+        setApiKeyState('保存后使用本次输入的 key', 'ready');
+        return;
+    }
+    if (hasSavedKey && savedPreset === preset) {
+        setApiKeyState('已保存 key，留空保存仍会使用', 'ready');
+        return;
+    }
+    if (hasSavedKey && savedPreset !== preset) {
+        setApiKeyState('切换服务商后需要输入对应 key', 'warning');
+        return;
+    }
+
+    setApiKeyState('未保存 key，请输入后保存', 'warning');
+}
+
+function setApiKeyState(message, tone) {
+    elements.apiKeyState.textContent = message;
+    elements.apiKeyState.classList.toggle('is-ready', tone === 'ready');
+    elements.apiKeyState.classList.toggle('is-warning', tone === 'warning');
 }
 
 async function onPdfPicked(event) {
