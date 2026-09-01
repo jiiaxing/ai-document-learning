@@ -15,6 +15,9 @@ const PAGE_TURN_COOLDOWN_MS = 360;
 const FILE_PANEL_TRANSITION_MS = 220;
 const ACTION_MENU_GAP = 12;
 const ACTION_MENU_EDGE_GAP = 8;
+const NOTE_DEFAULT_FONT_SIZE = 15;
+const NOTE_MIN_FONT_SIZE = 6;
+const NOTE_MAX_FONT_SIZE = 72;
 const MAX_IMAGE_ATTACHMENTS = 4;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const PAGE_IMAGE_MAX_EDGE = 1800;
@@ -143,7 +146,7 @@ const elements = {
     addNote: document.getElementById('addNote'),
     noteFontDown: document.getElementById('noteFontDown'),
     noteFontUp: document.getElementById('noteFontUp'),
-    noteFontInfo: document.getElementById('noteFontInfo'),
+    noteFontInput: document.getElementById('noteFontInput'),
     deleteNote: document.getElementById('deleteNote'),
     lineMode: document.getElementById('lineMode'),
     eraserMode: document.getElementById('eraserMode'),
@@ -277,8 +280,10 @@ function wireEvents() {
     elements.addHighlight.addEventListener('click', addHighlightFromSelection);
     elements.undoHighlight.addEventListener('click', undoLastHighlight);
     elements.addNote.addEventListener('click', addNoteFromSelection);
-    elements.noteFontDown.addEventListener('click', () => adjustSelectedNoteFont(-0.003));
-    elements.noteFontUp.addEventListener('click', () => adjustSelectedNoteFont(0.003));
+    elements.noteFontDown.addEventListener('click', () => adjustSelectedNoteFont(-1));
+    elements.noteFontUp.addEventListener('click', () => adjustSelectedNoteFont(1));
+    elements.noteFontInput.addEventListener('change', applyTypedNoteFont);
+    elements.noteFontInput.addEventListener('keydown', onNoteFontInputKeydown);
     elements.deleteNote.addEventListener('click', deleteSelectedNote);
     elements.lineMode.addEventListener('change', onLineModeChanged);
     elements.eraserMode.addEventListener('change', onEraserModeChanged);
@@ -2433,7 +2438,7 @@ function addAnnotationFromSelection(type, note = '', preparedSelection = null) {
         text: selection.text,
         note,
         box: type === 'note' ? noteBoxForSelection(selection) : undefined,
-        fontSizeRatio: type === 'note' ? 0.026 : undefined,
+        fontSize: type === 'note' ? NOTE_DEFAULT_FONT_SIZE : undefined,
         rects: selection.rects,
         createdAt: new Date().toISOString()
     };
@@ -2505,7 +2510,7 @@ function addTextBoxAnnotation(point, initialText = '') {
             width: 0.28,
             height: 0.08
         },
-        fontSizeRatio: 0.026,
+        fontSize: NOTE_DEFAULT_FONT_SIZE,
         rects: [],
         createdAt: new Date().toISOString()
     };
@@ -2597,7 +2602,7 @@ function renderInlineNote(layer, annotation) {
     noteText.title = annotationTitle(annotation);
     noteText.style.left = `${anchor.x * 100}%`;
     noteText.style.top = `${anchor.y * 100}%`;
-    noteText.style.fontSize = `${Math.max(13, layer.clientWidth * (annotation.fontSizeRatio || 0.026))}px`;
+    noteText.style.fontSize = `${noteFontSize(annotation)}px`;
     layer.appendChild(noteText);
 }
 
@@ -2613,7 +2618,7 @@ function renderNoteBox(layer, annotation) {
     noteBox.style.top = `${box.y * 100}%`;
     noteBox.style.width = `${box.width * 100}%`;
     noteBox.style.height = `${box.height * 100}%`;
-    noteBox.style.fontSize = `${Math.max(13, layer.clientWidth * (annotation.fontSizeRatio || 0.026))}px`;
+    noteBox.style.fontSize = `${noteFontSize(annotation)}px`;
     noteBox.title = editing ? '拖动左侧手柄移动，右下角拉伸大小' : '双击编辑笔记';
     noteBox.addEventListener('pointerdown', (event) => {
         event.stopPropagation();
@@ -2893,12 +2898,60 @@ function adjustSelectedNoteFont(delta) {
     if (!annotation || annotation.type !== 'note') {
         return;
     }
-    const nextSize = clamp((annotation.fontSizeRatio || 0.026) + delta, 0.014, 0.07);
-    updateAnnotation(annotation.id, { fontSizeRatio: nextSize });
+    setSelectedNoteFont(annotation, noteFontSize(annotation) + delta, 'button');
+}
+
+function applyTypedNoteFont() {
+    const annotation = findAnnotation(state.selectedAnnotationId);
+    if (!annotation || annotation.type !== 'note') {
+        return;
+    }
+    const parsed = Number(elements.noteFontInput.value);
+    if (!Number.isFinite(parsed)) {
+        elements.noteFontInput.value = String(noteFontSize(annotation));
+        flashStatus('请输入字号');
+        return;
+    }
+    setSelectedNoteFont(annotation, parsed, 'input');
+}
+
+function onNoteFontInputKeydown(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        applyTypedNoteFont();
+        elements.noteFontInput.blur();
+        return;
+    }
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        const annotation = findAnnotation(state.selectedAnnotationId);
+        elements.noteFontInput.value = annotation?.type === 'note'
+            ? String(noteFontSize(annotation))
+            : String(NOTE_DEFAULT_FONT_SIZE);
+        elements.noteFontInput.blur();
+    }
+}
+
+function setSelectedNoteFont(annotation, rawSize, trigger) {
+    const nextSize = clamp(Math.round(Number(rawSize) || NOTE_DEFAULT_FONT_SIZE), NOTE_MIN_FONT_SIZE, NOTE_MAX_FONT_SIZE);
+    updateAnnotation(annotation.id, { fontSize: nextSize, fontSizeRatio: null });
     logClient('annotation.note.font', {
         page: annotation.page,
-        fontSizeRatio: Number(nextSize.toFixed(4))
+        fontSize: nextSize,
+        trigger
     });
+}
+
+function noteFontSize(annotation) {
+    const explicitSize = Number(annotation?.fontSize);
+    if (Number.isFinite(explicitSize)) {
+        return clamp(Math.round(explicitSize), NOTE_MIN_FONT_SIZE, NOTE_MAX_FONT_SIZE);
+    }
+    const legacyRatio = Number(annotation?.fontSizeRatio);
+    if (Number.isFinite(legacyRatio)) {
+        return clamp(Math.round(legacyRatio * 1000), NOTE_MIN_FONT_SIZE, NOTE_MAX_FONT_SIZE);
+    }
+    return NOTE_DEFAULT_FONT_SIZE;
 }
 
 function updateAnnotation(annotationId, patch, options = {}) {
@@ -3742,10 +3795,11 @@ function updateAnnotationControls() {
     elements.eraserMode.disabled = !hasPdf;
     elements.noteFontDown.disabled = !selectedNote || selectedNote.type !== 'note';
     elements.noteFontUp.disabled = !selectedNote || selectedNote.type !== 'note';
+    elements.noteFontInput.disabled = !selectedNote || selectedNote.type !== 'note';
+    elements.noteFontInput.value = selectedNote?.type === 'note'
+        ? String(noteFontSize(selectedNote))
+        : String(NOTE_DEFAULT_FONT_SIZE);
     elements.deleteNote.disabled = !selectedNote || selectedNote.type !== 'note';
-    elements.noteFontInfo.textContent = selectedNote?.type === 'note'
-        ? `${Math.round((selectedNote.fontSizeRatio || 0.026) * 1000)}`
-        : '字号';
     elements.clearPageAnnotations.disabled = !hasPdf || !hasPageAnnotations;
     elements.page.classList.toggle('line-drawing-active', hasPdf && elements.lineMode.checked);
     elements.page.classList.toggle('note-placement-active', hasPdf && state.notePlacementMode);

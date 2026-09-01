@@ -497,6 +497,11 @@ button:focus-visible {
     min-width: 48px;
 }
 
+.note-font-input {
+    width: 56px;
+    text-align: center;
+}
+
 .file-toolbar button,
 .file-toolbar select,
 .file-toolbar input,
@@ -1069,7 +1074,7 @@ button:focus-visible {
 }
 
 .annotation-note-box.editing {
-    overflow: auto;
+    overflow: hidden;
     resize: both;
     border: 2px dashed rgba(24, 125, 218, 0.88);
     background: rgba(255, 255, 255, 0.08);
