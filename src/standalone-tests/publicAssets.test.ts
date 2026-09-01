@@ -50,6 +50,11 @@ test('front-end keeps provider settings in a drawer instead of the primary reade
     assert.ok(indexHtml.includes('id="settingsBackdrop"'));
     assert.ok(indexHtml.includes('class="settings-drawer"'));
     assert.ok(indexHtml.includes('class="toolbar-group'));
+    assert.equal(indexHtml.includes('class="app-header"'), false);
+    assert.equal(stylesCss.includes('.app-header'), false);
+    assert.equal(stylesCss.includes('.header-actions'), false);
+    assert.equal(indexHtml.includes('class="brand"'), false);
+    assert.equal(indexHtml.includes('class="brand-mark"'), false);
     assert.ok(appJs.includes('function setSettingsOpen'));
     assert.ok(appJs.includes("elements.settingsToggle.addEventListener('click'"));
     assert.ok(stylesCss.includes('.settings-drawer'));

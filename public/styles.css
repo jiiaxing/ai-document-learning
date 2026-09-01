@@ -29,7 +29,7 @@ body {
     font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
     overflow: hidden;
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
 }
 
 button,
@@ -115,56 +115,13 @@ button:focus-visible {
     outline-offset: 1px;
 }
 
-.app-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 14px;
-    align-items: center;
-    min-height: 56px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--line);
-    background: var(--surface);
-}
-
-.brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-}
-
-.brand-mark {
-    display: inline-grid;
-    width: 34px;
-    height: 34px;
-    place-items: center;
-    border-radius: 6px;
-    background: var(--ink);
-    color: #fff;
-    font-size: 13px;
-    font-weight: 700;
-}
-
-.brand strong {
-    display: block;
-    font-size: 15px;
-}
-
-#connectionStatus {
-    display: block;
-    margin-top: 2px;
-    color: var(--muted);
-    font-size: 12px;
-}
-
-#connectionStatus.busy {
-    color: var(--accent-2);
-}
-
-.header-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
 }
 
 .settings-backdrop {

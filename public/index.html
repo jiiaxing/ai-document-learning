@@ -7,18 +7,7 @@
     <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-    <header class="app-header">
-        <div class="brand">
-            <span class="brand-mark">AI</span>
-            <div>
-                <strong>PDF Tutor</strong>
-                <span id="connectionStatus">初始化</span>
-            </div>
-        </div>
-        <div class="header-actions">
-            <button id="settingsToggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="settingsForm">设置</button>
-        </div>
-    </header>
+    <span id="connectionStatus" class="visually-hidden" aria-live="polite">初始化</span>
 
     <div id="settingsBackdrop" class="settings-backdrop" hidden></div>
     <form id="settingsForm" class="settings-drawer" autocomplete="off" hidden>
@@ -193,6 +182,9 @@
                     <button id="clearPageAnnotations" type="button">清本页</button>
                 </div>
             </details>
+        </div>
+        <div class="toolbar-group settings-group">
+            <button id="settingsToggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="settingsForm">设置</button>
         </div>
     </section>
 
