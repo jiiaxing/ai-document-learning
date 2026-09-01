@@ -1091,7 +1091,8 @@ async function renderPage(options = {}) {
             await renderContinuousPages(options);
         } else {
             await renderSinglePage();
-            if (options.scroll === 'current') {
+            const restoredZoomAnchor = restoreZoomAnchor(options.zoomAnchor);
+            if (!restoredZoomAnchor && options.scroll === 'current') {
                 scrollToPage(state.currentPage, 'top');
             }
         }
@@ -1131,7 +1132,13 @@ async function renderContinuousPages(options = {}) {
         await renderPdfPage(pageNumber, pageNode);
     }
 
-    if (options.scroll === 'current') {
+    const restoredZoomAnchor = restoreZoomAnchor(options.zoomAnchor);
+    if (restoredZoomAnchor) {
+        const visiblePage = visibleContinuousPage();
+        if (visiblePage) {
+            state.currentPage = visiblePage;
+        }
+    } else if (options.scroll === 'current') {
         scrollToPage(state.currentPage, 'top');
     } else if (options.scroll !== 'keep') {
         elements.viewer.scrollTop = 0;
@@ -1240,6 +1247,27 @@ function scrollToPage(pageNumber, align = 'top') {
     elements.viewer.scrollTop = align === 'bottom' ? Math.max(0, bottom) : Math.max(0, top);
 }
 
+function restoreZoomAnchor(anchor) {
+    if (!anchor || !Number.isFinite(anchor.page) || !Number.isFinite(anchor.y) || !Number.isFinite(anchor.clientY)) {
+        return false;
+    }
+    const pageNode = pageElementForPage(anchor.page);
+    if (!pageNode) {
+        return false;
+    }
+    const pageRect = pageNode.getBoundingClientRect();
+    if (!pageRect.width || !pageRect.height) {
+        return false;
+    }
+    const nextY = pageRect.top + clamp(anchor.y, 0, 1) * pageRect.height;
+    elements.viewer.scrollTop += nextY - anchor.clientY;
+    if (Number.isFinite(anchor.x) && Number.isFinite(anchor.clientX)) {
+        const nextX = pageRect.left + clamp(anchor.x, 0, 1) * pageRect.width;
+        elements.viewer.scrollLeft += nextX - anchor.clientX;
+    }
+    return true;
+}
+
 function onPageJumpInput() {
     window.clearTimeout(state.pageJumpTimer);
     if (!state.pdfDoc || !elements.pageJumpInput.value.trim()) {
@@ -1322,14 +1350,14 @@ async function jumpToPageNumber(pageNumber, trigger) {
     await gotoPage(targetPage, { trigger, scroll: 'top' });
 }
 
-async function setScale(nextScale, trigger = 'zoom') {
+async function setScale(nextScale, trigger = 'zoom', options = {}) {
     const previousScale = state.scale;
     state.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
     if (Math.abs(state.scale - previousScale) < 0.001) {
         return;
     }
     saveUiPrefs();
-    await renderPage({ scroll: 'current' });
+    await renderPage({ scroll: 'current', zoomAnchor: options.zoomAnchor || null });
     flashStatus(`${Math.round(state.scale * 100)}%`);
     logClient('pdf.zoom.change', { scale: state.scale, trigger });
 }
@@ -1394,7 +1422,8 @@ function onViewerWheel(event) {
             return;
         }
         const direction = delta < 0 ? 1 : -1;
-        void setScale(state.scale + direction * zoomStep(), 'ctrl-wheel');
+        const zoomAnchor = zoomAnchorFromWheelEvent(event);
+        void setScale(state.scale + direction * zoomStep(), 'ctrl-wheel', { zoomAnchor });
         return;
     }
 
@@ -1413,6 +1442,27 @@ function onViewerWheel(event) {
         event.preventDefault();
         void turnPageFromInput(-1, 'wheel', 'bottom');
     }
+}
+
+function zoomAnchorFromWheelEvent(event) {
+    const anchor = actionAnchorFromEvent(event);
+    if (Number.isFinite(anchor?.page) && Number.isFinite(anchor?.x) && Number.isFinite(anchor?.y)) {
+        return anchor;
+    }
+    const pageNode = pageElementForPage(state.currentPage);
+    if (!pageNode || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) {
+        return anchor;
+    }
+    const pageRect = pageNode.getBoundingClientRect();
+    if (!pageRect.width || !pageRect.height) {
+        return anchor;
+    }
+    return {
+        ...anchor,
+        page: state.currentPage,
+        x: clamp((event.clientX - pageRect.left) / pageRect.width, 0, 1),
+        y: clamp((event.clientY - pageRect.top) / pageRect.height, 0, 1)
+    };
 }
 
 function onViewerScroll() {

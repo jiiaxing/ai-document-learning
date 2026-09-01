@@ -134,7 +134,7 @@ test('front-end supports wheel and keyboard page navigation', () => {
     assert.ok(appJs.includes("event.key === 'ArrowLeft' || event.key === 'PageUp'"));
     assert.ok(appJs.includes("turnPageFromInput(1, 'wheel', 'top')"));
     assert.ok(appJs.includes('event.ctrlKey || event.metaKey'));
-    assert.ok(appJs.includes("setScale(state.scale + direction * zoomStep(), 'ctrl-wheel')"));
+    assert.ok(appJs.includes("setScale(state.scale + direction * zoomStep(), 'ctrl-wheel', { zoomAnchor })"));
 });
 
 test('front-end supports visible PDF reader scrollbars and direct page jumping', () => {
@@ -229,6 +229,10 @@ test('front-end keeps zoom lightweight through Ctrl wheel', () => {
     assert.ok(appJs.includes('return scale >= MIN_INITIAL_SCALE ? scale : null;'));
     assert.ok(appJs.includes('function availableViewerWidth'));
     assert.ok(appJs.includes('function zoomStep'));
+    assert.ok(appJs.includes('function zoomAnchorFromWheelEvent'));
+    assert.ok(appJs.includes('function restoreZoomAnchor'));
+    assert.ok(appJs.includes('restoreZoomAnchor(options.zoomAnchor)'));
+    assert.ok(appJs.includes("setScale(state.scale + direction * zoomStep(), 'ctrl-wheel', { zoomAnchor })"));
     assert.ok(appJs.includes("logClient('pdf.zoom.change'"));
     assert.equal(indexHtml.includes('id="zoomOut"'), false);
     assert.equal(indexHtml.includes('id="zoomIn"'), false);
