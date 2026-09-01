@@ -1042,6 +1042,8 @@ button:focus-visible {
 }
 
 .annotation-note-box {
+    --note-content-padding: 8px 8px 8px 12px;
+    --note-handle-width: 10px;
     position: absolute;
     z-index: 4;
     min-width: 64px;
@@ -1067,8 +1069,6 @@ button:focus-visible {
 }
 
 .annotation-note-box.editing {
-    display: grid;
-    grid-template-columns: 28px minmax(0, 1fr);
     overflow: auto;
     resize: both;
     border: 2px dashed rgba(24, 125, 218, 0.88);
@@ -1084,20 +1084,22 @@ button:focus-visible {
     min-width: 100%;
     min-height: 100%;
     box-sizing: border-box;
-    padding: 0;
+    padding: var(--note-content-padding);
     overflow: visible;
     white-space: pre-wrap;
     cursor: text;
 }
 
 .annotation-note-handle {
-    display: grid;
-    min-height: 100%;
-    place-items: center;
+    position: absolute;
+    inset: 0 auto 0 0;
+    display: block;
+    width: var(--note-handle-width);
     background: rgba(24, 125, 218, 0.94);
     color: #fff;
     cursor: move;
-    font-size: 16px;
+    font-size: 0;
+    overflow: hidden;
     user-select: none;
     touch-action: none;
 }
@@ -1108,7 +1110,7 @@ button:focus-visible {
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    padding: 8px 8px 8px 10px;
+    padding: var(--note-content-padding);
     border: 0;
     background: transparent;
     color: inherit;

@@ -379,6 +379,11 @@ test('front-end renders editable note boxes and erasable freehand lines', () => 
     assert.ok(appJs.includes('annotation.note.delete'));
     assert.ok(appJs.includes('annotation.note.empty_delete'));
     assert.ok(appJs.includes('notePlacementMode'));
+    assert.ok(stylesCss.includes('--note-content-padding'));
+    assert.ok(stylesCss.includes('padding: var(--note-content-padding);'));
+    assert.ok(stylesCss.includes('--note-handle-width: 10px'));
+    assert.ok(stylesCss.includes('inset: 0 auto 0 0'));
+    assert.equal(stylesCss.includes('grid-template-columns: 28px minmax(0, 1fr)'), false);
     assert.ok(appJs.includes('addTextBoxAnnotation'));
     assert.ok(appJs.includes('focusNoteInput(annotation.id)'));
     assert.ok(appJs.includes('adjustSelectedNoteFont'));
