@@ -52,8 +52,7 @@ async function waitUntil(expression, timeoutMs = 20000) {
         title: document.title,
         bodyText: document.body ? document.body.innerText.slice(0, 320) : '',
         visualHidden: document.getElementById('visualActions')?.hidden,
-        pageInfo: document.getElementById('pageInfo')?.textContent,
-        zoomInfo: document.getElementById('zoomInfo')?.textContent
+        pageInfo: document.getElementById('pageInfo')?.textContent
     })`);
     throw new Error(`Timed out waiting for: ${expression}; debug=${JSON.stringify(debug.result?.result?.value)}`);
 }

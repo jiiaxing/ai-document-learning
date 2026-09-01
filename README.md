@@ -142,7 +142,7 @@ Example DeepSeek provider:
 
 - Local PDF opening and rendering
 - Single-page and continuous reading modes
-- Page navigation, jump-to-page, and zoom controls
+- Page navigation, direct page jumping, and Ctrl+wheel zoom
 - Selected-text explanation and translation
 - Page-level explanation and translation
 - Region screenshot explanation and translation

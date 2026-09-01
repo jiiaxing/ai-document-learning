@@ -119,8 +119,6 @@ const elements = {
     settingsStatus: document.getElementById('settingsStatus'),
     openPdf: document.getElementById('openPdf'),
     pdfInput: document.getElementById('pdfInput'),
-    workspacePdfSelect: document.getElementById('workspacePdfSelect'),
-    openWorkspacePdf: document.getElementById('openWorkspacePdf'),
     prevPage: document.getElementById('prevPage'),
     nextPage: document.getElementById('nextPage'),
     explainPage: document.getElementById('explainPage'),
@@ -128,10 +126,7 @@ const elements = {
     pageJumpInput: document.getElementById('pageJumpInput'),
     pageSlider: document.getElementById('pageSlider'),
     readerMode: document.getElementById('readerMode'),
-    zoomOut: document.getElementById('zoomOut'),
-    zoomIn: document.getElementById('zoomIn'),
     pageInfo: document.getElementById('pageInfo'),
-    zoomInfo: document.getElementById('zoomInfo'),
     autoTranslate: document.getElementById('autoTranslate'),
     autoExplain: document.getElementById('autoExplain'),
     editMode: document.getElementById('editMode'),
@@ -222,7 +217,6 @@ async function boot() {
         logClient('app.settings.loaded', publicSettingsLog(state.settings));
         state.pdfjsLib = await import(PDFJS_URL);
         state.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
-        await refreshWorkspacePdfs();
         updateToolbar();
         setBusy(false, providerLabel());
         await maybeOpenPdfFromQuery();
@@ -247,7 +241,6 @@ function wireEvents() {
     elements.protocol.addEventListener('change', updateProviderFields);
     elements.openPdf.addEventListener('click', () => elements.pdfInput.click());
     elements.pdfInput.addEventListener('change', onPdfPicked);
-    elements.openWorkspacePdf.addEventListener('click', openSelectedWorkspacePdf);
     elements.prevPage.addEventListener('click', () => gotoPage(state.currentPage - 1));
     elements.nextPage.addEventListener('click', () => gotoPage(state.currentPage + 1));
     elements.explainPage.addEventListener('click', () => void explainCurrentPage());
@@ -258,9 +251,6 @@ function wireEvents() {
     elements.pageSlider.addEventListener('change', onPageSliderChange);
     elements.readerMode.addEventListener('change', onReaderModeChanged);
     elements.visualSelectionStyle.addEventListener('change', onVisualSelectionStyleChanged);
-    elements.zoomOut.addEventListener('click', () => setScale(state.scale - zoomStep()));
-    elements.zoomIn.addEventListener('click', () => setScale(state.scale + zoomStep()));
-    elements.zoomInfo.addEventListener('dblclick', () => void resetScaleToFit());
     elements.autoTranslate.addEventListener('change', onAutoTriggerChanged);
     elements.autoExplain.addEventListener('change', onAutoTriggerChanged);
     elements.editMode.addEventListener('change', onEditModeChanged);
@@ -685,42 +675,28 @@ async function onPdfPicked(event) {
     }
 }
 
-async function refreshWorkspacePdfs() {
-    const result = await getJson('/api/local-pdfs');
-    const files = Array.isArray(result.files) ? result.files : [];
-    elements.workspacePdfSelect.innerHTML = '';
-    for (const file of files) {
-        const name = String(file.name || '');
-        if (!name) {
-            continue;
-        }
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        elements.workspacePdfSelect.appendChild(option);
-    }
-    elements.openWorkspacePdf.disabled = files.length === 0;
-    elements.workspacePdfSelect.disabled = files.length === 0;
-    logClient('workspace_pdfs.loaded', { count: files.length, names: files.map((file) => file.name) });
-}
-
-async function openSelectedWorkspacePdf() {
-    const name = elements.workspacePdfSelect.value;
-    if (!name) {
+async function openWorkspacePdfByName(name) {
+    const pdfName = String(name || '').trim();
+    if (!pdfName) {
         return;
     }
 
-    setBusy(true, '打开工作区 PDF');
-    logClient('workspace_pdf.open.start', { name });
+    if (!state.pdfjsLib) {
+        appendMessage('assistant', 'PDF 渲染器尚未加载完成。');
+        return;
+    }
+
+    setBusy(true, '打开 PDF');
+    logClient('workspace_pdf.open.start', { name: pdfName });
     try {
-        const response = await fetch(`/local-pdfs/${encodeURIComponent(name)}`);
+        const response = await fetch(`/local-pdfs/${encodeURIComponent(pdfName)}`);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
-        await loadPdfBytes(new Uint8Array(await response.arrayBuffer()), name);
+        await loadPdfBytes(new Uint8Array(await response.arrayBuffer()), pdfName);
     } catch (error) {
-        appendMessage('assistant', `工作区 PDF 打开失败：${messageOf(error)}`);
-        logClient('workspace_pdf.open.error', { name, message: messageOf(error) });
+        appendMessage('assistant', `PDF 打开失败：${messageOf(error)}`);
+        logClient('workspace_pdf.open.error', { name: pdfName, message: messageOf(error) });
     } finally {
         setBusy(false);
         updateToolbar();
@@ -729,12 +705,11 @@ async function openSelectedWorkspacePdf() {
 
 async function maybeOpenPdfFromQuery() {
     const query = new URLSearchParams(window.location.search);
-    const pdfName = query.get('pdf');
-    if (!pdfName) {
+    const name = query.get('pdf');
+    if (!name) {
         return;
     }
-    elements.workspacePdfSelect.value = pdfName;
-    await openSelectedWorkspacePdf();
+    await openWorkspacePdfByName(name);
 }
 
 async function loadPdfBytes(bytes, name) {
@@ -1013,21 +988,16 @@ async function jumpToPageNumber(pageNumber, trigger) {
     await gotoPage(targetPage, { trigger, scroll: 'top' });
 }
 
-async function setScale(nextScale) {
+async function setScale(nextScale, trigger = 'zoom') {
+    const previousScale = state.scale;
     state.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
-    saveUiPrefs();
-    await renderPage({ scroll: 'current' });
-}
-
-async function resetScaleToFit() {
-    if (!state.pdfDoc) {
+    if (Math.abs(state.scale - previousScale) < 0.001) {
         return;
     }
-    state.scale = await computeFitWidthScale();
     saveUiPrefs();
     await renderPage({ scroll: 'current' });
-    flashStatus('已适配页面宽度');
-    logClient('pdf.zoom.fit_width', { scale: state.scale });
+    flashStatus(`${Math.round(state.scale * 100)}%`);
+    logClient('pdf.zoom.change', { scale: state.scale, trigger });
 }
 
 function onAutoTriggerChanged() {
@@ -1096,7 +1066,24 @@ function resetTransientAnnotationTools() {
 }
 
 function onViewerWheel(event) {
-    if (!state.pdfDoc || state.renderLock || event.ctrlKey) {
+    if (event.ctrlKey || event.metaKey) {
+        if (!state.pdfDoc) {
+            return;
+        }
+        event.preventDefault();
+        if (state.renderLock) {
+            return;
+        }
+        const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+        if (delta === 0) {
+            return;
+        }
+        const direction = delta < 0 ? 1 : -1;
+        void setScale(state.scale + direction * zoomStep(), 'ctrl-wheel');
+        return;
+    }
+
+    if (!state.pdfDoc || state.renderLock) {
         return;
     }
 
@@ -3329,13 +3316,10 @@ function updateToolbar() {
     elements.pageSlider.disabled = !pages;
     elements.pageSlider.max = pages ? String(pages) : '1';
     elements.pageSlider.value = pages ? String(state.currentPage) : '1';
-    elements.zoomInfo.textContent = `${Math.round(state.scale * 100)}%`;
     elements.prevPage.disabled = !pages || state.currentPage <= 1;
     elements.nextPage.disabled = !pages || state.currentPage >= pages;
     elements.explainPage.disabled = !pages;
     elements.translatePage.disabled = !pages;
-    elements.zoomOut.disabled = !pages;
-    elements.zoomIn.disabled = !pages;
     updateAnnotationControls();
 }
 

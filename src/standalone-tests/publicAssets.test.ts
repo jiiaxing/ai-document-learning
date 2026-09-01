@@ -49,9 +49,16 @@ test('front-end exposes prompt template settings', () => {
 });
 
 test('front-end keeps provider settings in a drawer instead of the primary reader chrome', () => {
+    const settingsHtml = indexHtml.slice(indexHtml.indexOf('<form id="settingsForm"'), indexHtml.indexOf('</form>') + '</form>'.length);
+    const assistantPaneHtml = indexHtml.slice(indexHtml.indexOf('<aside id="assistantPane"'), indexHtml.indexOf('<div id="paneRestoreBar"'));
+
     assert.ok(indexHtml.includes('id="settingsToggle"'));
     assert.ok(indexHtml.includes('id="settingsBackdrop"'));
     assert.ok(indexHtml.includes('class="settings-drawer"'));
+    assert.ok(settingsHtml.includes('id="clientLog"'));
+    assert.ok(settingsHtml.includes('开发者日志'));
+    assert.equal(assistantPaneHtml.includes('id="clientLog"'), false);
+    assert.equal(assistantPaneHtml.includes('开发者日志'), false);
     assert.ok(indexHtml.includes('class="toolbar-group'));
     assert.equal(indexHtml.includes('class="app-header"'), false);
     assert.equal(stylesCss.includes('.app-header'), false);
@@ -107,6 +114,8 @@ test('front-end supports wheel and keyboard page navigation', () => {
     assert.ok(appJs.includes("event.key === 'ArrowRight' || event.key === 'PageDown'"));
     assert.ok(appJs.includes("event.key === 'ArrowLeft' || event.key === 'PageUp'"));
     assert.ok(appJs.includes("turnPageFromInput(1, 'wheel', 'top')"));
+    assert.ok(appJs.includes('event.ctrlKey || event.metaKey'));
+    assert.ok(appJs.includes("setScale(state.scale + direction * zoomStep(), 'ctrl-wheel')"));
 });
 
 test('front-end supports visible PDF reader scrollbars and direct page jumping', () => {
@@ -117,7 +126,11 @@ test('front-end supports visible PDF reader scrollbars and direct page jumping',
     assert.equal(indexHtml.includes('id="pageJumpButton"'), false);
     assert.ok(indexHtml.includes('id="pageSlider"'));
     assert.equal(toolbarHtml.includes('id="pageJumpInput"'), false);
+    assert.equal(toolbarHtml.includes('id="readerMode"'), false);
+    assert.equal(toolbarHtml.includes('id="workspacePdfSelect"'), false);
+    assert.equal(toolbarHtml.includes('id="openWorkspacePdf"'), false);
     assert.ok(readerPaneHtml.includes('class="reader-footer"'));
+    assert.ok(readerPaneHtml.includes('id="readerMode"'));
     assert.ok(appJs.includes('pageJumpInput: document.getElementById'));
     assert.ok(appJs.includes("elements.pageJumpInput.addEventListener('input', onPageJumpInput)"));
     assert.ok(appJs.includes('function onPageJumpInput'));
@@ -131,7 +144,7 @@ test('front-end supports visible PDF reader scrollbars and direct page jumping',
     assert.ok(stylesCss.includes('.page-slider'));
 });
 
-test('front-end keeps open zoom readable while retaining fit-width zoom out', () => {
+test('front-end keeps zoom lightweight through Ctrl wheel', () => {
     assert.ok(appJs.includes('const MIN_SCALE = 0.05'));
     assert.ok(appJs.includes('const MIN_INITIAL_SCALE = 0.8'));
     assert.ok(appJs.includes('const VIEWER_MIN_AVAILABLE_WIDTH = 520'));
@@ -139,16 +152,27 @@ test('front-end keeps open zoom readable while retaining fit-width zoom out', ()
     assert.ok(appJs.includes('saved >= MIN_INITIAL_SCALE'));
     assert.ok(appJs.includes('return Math.max(MIN_INITIAL_SCALE, fitScale);'));
     assert.ok(appJs.includes('async function computeFitWidthScale'));
-    assert.ok(appJs.includes('state.scale = await computeFitWidthScale();'));
+    assert.ok(appJs.includes('async function setScale(nextScale, trigger ='));
     assert.ok(appJs.includes('return scale >= MIN_INITIAL_SCALE ? scale : null;'));
     assert.ok(appJs.includes('function availableViewerWidth'));
-    assert.ok(appJs.includes('elements.zoomInfo.addEventListener'));
-    assert.ok(appJs.includes('resetScaleToFit'));
     assert.ok(appJs.includes('function zoomStep'));
+    assert.ok(appJs.includes("logClient('pdf.zoom.change'"));
+    assert.equal(indexHtml.includes('id="zoomOut"'), false);
+    assert.equal(indexHtml.includes('id="zoomIn"'), false);
+    assert.equal(indexHtml.includes('id="zoomInfo"'), false);
+    assert.equal(appJs.includes('zoomOut'), false);
+    assert.equal(appJs.includes('zoomIn'), false);
+    assert.equal(appJs.includes('zoomInfo'), false);
+    assert.equal(stylesCss.includes('#zoomInfo'), false);
 });
 
 test('front-end supports selectable continuous PDF reading', () => {
+    const toolbarHtml = indexHtml.slice(indexHtml.indexOf('<section class="file-toolbar">'), indexHtml.indexOf('<main id="appShell"'));
+    const readerFooterHtml = indexHtml.slice(indexHtml.indexOf('<footer class="reader-footer"'), indexHtml.indexOf('</footer>', indexHtml.indexOf('<footer class="reader-footer"')));
+
     assert.ok(indexHtml.includes('id="readerMode"'));
+    assert.equal(toolbarHtml.includes('id="readerMode"'), false);
+    assert.ok(readerFooterHtml.includes('id="readerMode"'));
     assert.ok(indexHtml.includes('value="continuous"'));
     assert.ok(appJs.includes("const READER_MODE_CONTINUOUS = 'continuous'"));
     assert.ok(appJs.includes('onReaderModeChanged'));

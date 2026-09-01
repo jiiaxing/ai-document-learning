@@ -379,20 +379,11 @@ button:focus-visible {
     padding: 0 8px;
 }
 
-#workspacePdfSelect {
-    max-width: 180px;
-}
-
 .page-info {
     min-width: 58px;
     text-align: center;
     color: var(--muted);
     font-size: 13px;
-}
-
-#zoomInfo {
-    cursor: pointer;
-    user-select: none;
 }
 
 .page-jump-input {
@@ -406,6 +397,8 @@ button:focus-visible {
 }
 
 .reader-mode-control {
+    display: inline-flex;
+    align-items: center;
     gap: 6px;
 }
 
@@ -732,6 +725,7 @@ button:focus-visible {
 
 .reader-footer {
     display: flex;
+    flex-wrap: nowrap;
     align-items: center;
     justify-content: center;
     gap: 10px;
@@ -770,6 +764,12 @@ button:focus-visible {
 .reader-footer .page-info {
     min-width: 40px;
     text-align: left;
+}
+
+.reader-footer .reader-mode-control select {
+    height: 34px;
+    border-radius: 6px;
+    background-color: var(--surface);
 }
 
 .viewer::-webkit-scrollbar {
@@ -1192,7 +1192,10 @@ button:focus-visible {
 }
 
 .log-panel {
-    border-top: 1px solid var(--line);
+    overflow: hidden;
+    margin-top: 14px;
+    border: 1px solid rgba(15, 23, 42, 0.16);
+    border-radius: 8px;
     background: #202521;
     color: #dbe7dc;
 }
@@ -1200,11 +1203,12 @@ button:focus-visible {
 .log-panel summary {
     cursor: pointer;
     padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
     font-size: 12px;
 }
 
 .log-panel pre {
-    max-height: 140px;
+    max-height: 220px;
     overflow: auto;
     margin: 0;
     padding: 0 12px 12px;

@@ -119,23 +119,17 @@
                 </label>
             </div>
         </details>
+
+        <details class="log-panel settings-log-panel">
+            <summary>开发者日志</summary>
+            <pre id="clientLog"></pre>
+        </details>
     </form>
 
     <section class="file-toolbar">
         <div class="toolbar-group file-group">
             <button id="openPdf" class="primary" type="button">打开 PDF</button>
             <input id="pdfInput" type="file" accept="application/pdf,.pdf" hidden />
-            <select id="workspacePdfSelect" aria-label="工作区 PDF"></select>
-            <button id="openWorkspacePdf" type="button" title="打开工作区 PDF">工作区</button>
-        </div>
-        <div class="toolbar-group view-group">
-            <select id="readerMode" aria-label="阅读模式">
-                <option value="single">单页</option>
-                <option value="continuous">连续</option>
-            </select>
-            <button id="zoomOut" type="button" aria-label="缩小">−</button>
-            <span id="zoomInfo" class="page-info">125%</span>
-            <button id="zoomIn" type="button" aria-label="放大">+</button>
         </div>
         <div class="toolbar-group ai-group">
             <button id="explainPage" type="button" title="讲解本页">讲解页</button>
@@ -220,6 +214,13 @@
                     <input id="pageJumpInput" class="page-jump-input" type="number" min="1" step="1" aria-label="当前页码" placeholder="-" />
                     <span id="pageInfo" class="page-info">/ -</span>
                 </label>
+                <label class="reader-mode-control">
+                    <span class="visually-hidden">阅读模式</span>
+                    <select id="readerMode" aria-label="阅读模式">
+                        <option value="single">单页</option>
+                        <option value="continuous">连续</option>
+                    </select>
+                </label>
                 <input id="pageSlider" class="page-slider" type="range" min="1" max="1" step="1" value="1" aria-label="页码滑条" disabled />
                 <button id="nextPage" class="icon-button" type="button" aria-label="下一页">→</button>
             </footer>
@@ -246,10 +247,6 @@
                 </div>
                 <input id="imageInput" type="file" accept="image/*" multiple hidden>
             </form>
-            <details class="log-panel">
-                <summary>开发者日志</summary>
-                <pre id="clientLog"></pre>
-            </details>
         </aside>
         <div id="paneRestoreBar" class="pane-restore-bar">
             <button id="restoreTranslation" type="button" hidden>显示翻译</button>

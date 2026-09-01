@@ -11,7 +11,7 @@ This repo is now a standalone AI PDF learning app. The old VS Code extension sur
 The app should behave like a normal desktop PDF reader:
 
 - Open local/workspace PDFs.
-- Read and render PDFs with single-page or continuous modes.
+- Read and render PDFs with single-page or continuous modes; the mode selector sits with the PDF footer controls.
 - Select PDF text and trigger AI explanation/translation.
 - If auto-trigger is disabled, show floating nearby buttons for explanation and translation independently.
 - Translate selected text or manually entered text.
@@ -66,7 +66,7 @@ Details:
 - Defaults are dynamic by window width, not fixed pixels.
 - Old saved `190%` scale is migrated away.
 - Old pane widths `320/420` are migrated away unless the user had deliberately changed them.
-- The latest automated layout smoke test measured:
+- The latest automated layout smoke test measures the rendered scale from logs instead of a visible zoom widget:
   - shell width `1426`
   - translation width `314`
   - reader width `725`
