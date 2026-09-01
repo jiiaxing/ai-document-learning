@@ -39,6 +39,29 @@ test('config normalizes response paths when switching protocols', () => {
     assert.equal(anthropicConfig.provider.responseTextPath, 'content.0.text');
 });
 
+test('config supports OpenAI and DeepSeek provider presets', () => {
+    const openAiConfig = loadConfig(resolve(__dirname, '../..'), {
+        AI_TUTOR_PROVIDER_PRESET: 'openai',
+        AI_TUTOR_API_KEY: 'unit-secret'
+    });
+    const deepSeekConfig = loadConfig(resolve(__dirname, '../..'), {
+        AI_TUTOR_PROVIDER_PRESET: 'deepseek',
+        AI_TUTOR_API_KEY: 'unit-secret'
+    });
+
+    assert.equal(openAiConfig.provider.preset, 'openai');
+    assert.equal(openAiConfig.provider.kind, 'openaiCompatible');
+    assert.equal(openAiConfig.provider.protocol, 'openai');
+    assert.equal(openAiConfig.provider.endpoint, 'https://api.openai.com/v1/chat/completions');
+    assert.equal(openAiConfig.provider.model, 'gpt-5');
+
+    assert.equal(deepSeekConfig.provider.preset, 'deepseek');
+    assert.equal(deepSeekConfig.provider.kind, 'openaiCompatible');
+    assert.equal(deepSeekConfig.provider.protocol, 'openai');
+    assert.equal(deepSeekConfig.provider.endpoint, 'https://api.deepseek.com/chat/completions');
+    assert.equal(deepSeekConfig.provider.model, 'deepseek-v4-pro');
+});
+
 test('config migrates legacy prompt defaults for contextual explanation', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ai-pdf-tutor-'));
     const configFile = join(tempDir, 'legacy-settings.json');

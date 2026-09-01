@@ -13,10 +13,12 @@ export interface ImageAttachment {
 
 export type ProviderProtocol = 'openai' | 'anthropic';
 export type ProviderKind = 'mock' | 'openaiCompatible';
+export type ProviderPreset = 'mock' | 'openai' | 'deepseek' | 'custom';
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export type AiTaskMode = 'explain' | 'translate' | 'ask';
 
 export interface ProviderConfig {
+    preset: ProviderPreset;
     kind: ProviderKind;
     protocol: ProviderProtocol;
     endpoint: string;
@@ -61,6 +63,7 @@ export interface ExplainRequest {
 
 export interface SafeClientConfig {
     providerKind: ProviderKind;
+    providerPreset: ProviderPreset;
     protocol: ProviderProtocol;
     model: string;
     endpoint: string;
@@ -71,6 +74,7 @@ export interface SafeClientConfig {
 export interface PublicSettings {
     provider: {
         kind: ProviderKind;
+        preset: ProviderPreset;
         protocol: ProviderProtocol;
         endpoint: string;
         model: string;
@@ -94,6 +98,7 @@ export interface PublicSettings {
 export interface SettingsUpdate {
     provider?: {
         kind?: ProviderKind;
+        preset?: ProviderPreset;
         protocol?: ProviderProtocol;
         endpoint?: string;
         model?: string;

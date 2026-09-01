@@ -29,6 +29,20 @@ const MIN_TRANSLATION_PANE_WIDTH = 220;
 const MAX_TRANSLATION_PANE_WIDTH = 560;
 const MIN_ASSISTANT_PANE_WIDTH = 300;
 const MAX_ASSISTANT_PANE_WIDTH = 680;
+const PROVIDER_PRESETS = {
+    openai: {
+        protocol: 'openai',
+        endpoint: 'https://api.openai.com/v1/chat/completions',
+        model: 'gpt-5',
+        responseTextPath: 'choices.0.message.content'
+    },
+    deepseek: {
+        protocol: 'openai',
+        endpoint: 'https://api.deepseek.com/chat/completions',
+        model: 'deepseek-v4-pro',
+        responseTextPath: 'choices.0.message.content'
+    }
+};
 
 class SelectionGate {
     constructor(config) {
@@ -224,7 +238,7 @@ function wireEvents() {
     elements.settingsToggle.addEventListener('click', () => setSettingsOpen(!settingsOpen()));
     elements.settingsClose.addEventListener('click', () => setSettingsOpen(false));
     elements.settingsBackdrop.addEventListener('click', () => setSettingsOpen(false));
-    elements.providerKind.addEventListener('change', updateProviderFields);
+    elements.providerKind.addEventListener('change', onProviderKindChanged);
     elements.apiKey.addEventListener('input', () => {
         state.apiKeyTouched = true;
     });
@@ -488,7 +502,8 @@ async function saveSettings(event) {
         : '';
     const payload = {
         provider: {
-            kind: elements.providerKind.value,
+            preset: elements.providerKind.value,
+            kind: elements.providerKind.value === 'mock' ? 'mock' : 'openaiCompatible',
             protocol: elements.protocol.value,
             endpoint: elements.endpoint.value.trim(),
             model: elements.model.value.trim(),
@@ -530,7 +545,7 @@ async function saveSettings(event) {
 }
 
 function applySettingsToForm(settings) {
-    elements.providerKind.value = settings.provider.kind;
+    elements.providerKind.value = providerPresetFromSettings(settings.provider);
     elements.protocol.value = settings.provider.protocol;
     elements.endpoint.value = settings.provider.endpoint;
     elements.model.value = settings.provider.model;
@@ -554,12 +569,57 @@ function applySettingsToForm(settings) {
     updateProviderFields();
 }
 
+function providerPresetFromSettings(provider) {
+    if (provider.preset === 'mock' || provider.preset === 'openai' || provider.preset === 'deepseek' || provider.preset === 'custom') {
+        return provider.preset;
+    }
+    if (provider.kind === 'mock') {
+        return 'mock';
+    }
+    try {
+        const host = new URL(provider.endpoint || '').hostname.toLowerCase();
+        if (host === 'api.openai.com') {
+            return 'openai';
+        }
+        if (host.endsWith('deepseek.com')) {
+            return 'deepseek';
+        }
+    } catch {
+        return 'custom';
+    }
+    return 'custom';
+}
+
+function onProviderKindChanged() {
+    applyProviderPresetDefaults(elements.providerKind.value);
+    updateProviderFields();
+}
+
+function applyProviderPresetDefaults(preset) {
+    const defaults = PROVIDER_PRESETS[preset];
+    if (!defaults) {
+        return;
+    }
+    elements.protocol.value = defaults.protocol;
+    elements.endpoint.value = defaults.endpoint;
+    elements.model.value = defaults.model;
+    elements.apiKeyHeader.value = 'Authorization';
+    elements.apiKeyPrefix.value = 'Bearer ';
+    elements.responseTextPath.value = defaults.responseTextPath;
+}
+
 function updateProviderFields() {
-    const isMock = elements.providerKind.value === 'mock';
-    elements.endpoint.disabled = isMock;
+    const preset = elements.providerKind.value;
+    const isMock = preset === 'mock';
+    const isManagedPreset = preset === 'openai' || preset === 'deepseek';
+    elements.protocol.disabled = isMock || isManagedPreset;
+    elements.endpoint.disabled = isMock || isManagedPreset;
     elements.model.disabled = isMock;
     elements.apiKey.disabled = isMock;
     elements.clearApiKey.disabled = isMock;
+    elements.apiKeyHeader.disabled = isMock || isManagedPreset;
+    elements.apiKeyPrefix.disabled = isMock || isManagedPreset;
+    elements.responseTextPath.disabled = isMock || isManagedPreset;
 }
 
 async function onPdfPicked(event) {
@@ -3791,7 +3851,7 @@ function providerLabel() {
         return '就绪';
     }
     const provider = state.settings.provider;
-    return `${provider.kind} / ${provider.model}${provider.apiKeyConfigured ? '' : ' / no key'}`;
+    return `${provider.preset || provider.kind} / ${provider.model}${provider.apiKeyConfigured ? '' : ' / no key'}`;
 }
 
 async function getJson(url) {
@@ -3816,6 +3876,7 @@ function logClient(event, data = {}) {
 function publicSettingsLog(settings) {
     return {
         providerKind: settings.provider.kind,
+        providerPreset: settings.provider.preset,
         protocol: settings.provider.protocol,
         endpoint: settings.provider.endpoint,
         model: settings.provider.model,

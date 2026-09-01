@@ -91,6 +91,7 @@ class OpenAICompatibleStreamingProvider implements StreamingAiProvider {
             : buildOpenAiBody(messages, provider, images);
 
         this.logger.info('provider.http.start', {
+            preset: provider.preset,
             protocol: provider.protocol,
             endpoint: provider.endpoint,
             model: provider.model,

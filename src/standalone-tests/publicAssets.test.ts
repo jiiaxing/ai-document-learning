@@ -56,6 +56,20 @@ test('front-end keeps provider settings in a drawer instead of the primary reade
     assert.ok(stylesCss.includes('.toolbar-group'));
 });
 
+test('front-end exposes OpenAI and DeepSeek provider presets', () => {
+    assert.ok(indexHtml.includes('value="openai"'));
+    assert.ok(indexHtml.includes('OpenAI / GPT'));
+    assert.ok(indexHtml.includes('value="deepseek"'));
+    assert.ok(indexHtml.includes('DeepSeek'));
+    assert.ok(indexHtml.includes('value="custom"'));
+    assert.ok(appJs.includes('const PROVIDER_PRESETS'));
+    assert.ok(appJs.includes('https://api.openai.com/v1/chat/completions'));
+    assert.ok(appJs.includes('https://api.deepseek.com/chat/completions'));
+    assert.ok(appJs.includes('deepseek-v4-pro'));
+    assert.ok(appJs.includes('function providerPresetFromSettings'));
+    assert.ok(appJs.includes('preset: elements.providerKind.value'));
+});
+
 test('front-end builds hidden PDF context and anchors new assistant replies at their start', () => {
     assert.ok(appJs.includes('buildPageContext(selectionSnapshot.page)'));
     assert.ok(appJs.includes('buildPageContext(state.currentPage)'));

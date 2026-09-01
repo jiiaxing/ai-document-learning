@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { AppConfig, LogLevel, ProviderKind, ProviderProtocol, PublicSettings, SettingsUpdate } from './types';
+import { AppConfig, LogLevel, ProviderKind, ProviderPreset, ProviderProtocol, PublicSettings, SettingsUpdate } from './types';
 import { resolveResponseTextPath } from '../core/openaiResponseUtils';
 
 export class SettingsValidationError extends Error {}
@@ -68,13 +68,27 @@ type RawConfig = Partial<AppConfig> & {
     provider?: Partial<AppConfig['provider']>;
 };
 
+type PresetDefaults = {
+    protocol: ProviderProtocol;
+    endpoint: string;
+    model: string;
+};
+
+const providerPresetDefaults: Record<Exclude<ProviderPreset, 'custom' | 'mock'>, PresetDefaults> = {
+    openai: {
+        protocol: 'openai',
+        endpoint: 'https://api.openai.com/v1/chat/completions',
+        model: 'gpt-5'
+    },
+    deepseek: {
+        protocol: 'openai',
+        endpoint: 'https://api.deepseek.com/chat/completions',
+        model: 'deepseek-v4-pro'
+    }
+};
+
 export function loadConfig(cwd = process.cwd(), env = process.env): AppConfig {
     const fileConfig = readConfigFile(cwd, env.AI_TUTOR_CONFIG);
-    const protocol = normalizeProtocol(
-        env.AI_TUTOR_PROTOCOL
-        ?? fileConfig.provider?.protocol
-        ?? 'openai'
-    );
     const apiKey = stringValue(
         env.AI_TUTOR_API_KEY
         ?? env.OPENAI_API_KEY
@@ -82,8 +96,25 @@ export function loadConfig(cwd = process.cwd(), env = process.env): AppConfig {
         ?? fileConfig.provider?.apiKey
         ?? ''
     );
-    const requestedKind = stringValue(env.AI_TUTOR_PROVIDER ?? fileConfig.provider?.kind ?? '');
-    const providerKind = normalizeProviderKind(requestedKind, apiKey);
+    const rawPresetValue = env.AI_TUTOR_PROVIDER_PRESET
+        ?? fileConfig.provider?.preset
+        ?? env.AI_TUTOR_PROVIDER
+        ?? fileConfig.provider?.kind
+        ?? '';
+    const preset = resolveProviderPreset(rawPresetValue, env.AI_TUTOR_ENDPOINT ?? fileConfig.provider?.endpoint ?? '', apiKey);
+    const presetDefaults = providerDefaultsForPreset(preset);
+    const envPresetOverride = Boolean(
+        env.AI_TUTOR_PROVIDER_PRESET
+        || ['mock', 'openai', 'gpt', 'deepseek'].includes(stringValue(env.AI_TUTOR_PROVIDER).toLowerCase())
+    );
+    const protocol = normalizeProtocol(
+        env.AI_TUTOR_PROTOCOL
+        ?? (envPresetOverride ? presetDefaults?.protocol : undefined)
+        ?? fileConfig.provider?.protocol
+        ?? presetDefaults?.protocol
+        ?? 'openai'
+    );
+    const providerKind = providerKindForPreset(preset);
     const logLevel = normalizeLogLevel(env.AI_TUTOR_LOG_LEVEL ?? fileConfig.logLevel ?? 'debug');
     const logFile = resolve(cwd, stringValue(env.AI_TUTOR_LOG_FILE ?? fileConfig.logFile ?? 'logs/app.log'));
 
@@ -100,10 +131,11 @@ export function loadConfig(cwd = process.cwd(), env = process.env): AppConfig {
         logLevel,
         logFile,
         provider: {
+            preset,
             kind: providerKind,
             protocol,
-            endpoint: normalizeEndpoint(protocol, env.AI_TUTOR_ENDPOINT ?? fileConfig.provider?.endpoint ?? 'https://api.openai.com/v1/chat/completions'),
-            model: stringValue(env.AI_TUTOR_MODEL ?? fileConfig.provider?.model ?? 'gpt-4o-mini'),
+            endpoint: normalizeEndpoint(protocol, env.AI_TUTOR_ENDPOINT ?? (envPresetOverride ? presetDefaults?.endpoint : undefined) ?? fileConfig.provider?.endpoint ?? presetDefaults?.endpoint ?? 'https://api.openai.com/v1/chat/completions'),
+            model: stringValue(env.AI_TUTOR_MODEL ?? (envPresetOverride ? presetDefaults?.model : undefined) ?? fileConfig.provider?.model ?? presetDefaults?.model ?? 'gpt-4o-mini'),
             apiKey,
             apiKeyHeader: stringValue(env.AI_TUTOR_API_KEY_HEADER ?? fileConfig.provider?.apiKeyHeader ?? 'Authorization'),
             apiKeyPrefix: normalizeApiKeyPrefix(env.AI_TUTOR_API_KEY_PREFIX ?? fileConfig.provider?.apiKeyPrefix ?? 'Bearer '),
@@ -131,6 +163,7 @@ export function publicSettingsFromConfig(config: AppConfig): PublicSettings {
     return {
         provider: {
             kind: config.provider.kind,
+            preset: config.provider.preset,
             protocol: config.provider.protocol,
             endpoint: config.provider.endpoint,
             model: config.provider.model,
@@ -159,19 +192,21 @@ export function applySettingsUpdate(current: AppConfig, update: SettingsUpdate):
         : (typeof providerUpdate.apiKey === 'string' && providerUpdate.apiKey.trim()
             ? providerUpdate.apiKey.trim()
             : current.provider.apiKey);
-    const nextProtocol = normalizeProtocol(providerUpdate.protocol ?? current.provider.protocol);
-    const requestedKind = stringValue(providerUpdate.kind ?? current.provider.kind);
-    const nextEndpoint = normalizeEndpoint(nextProtocol, providerUpdate.endpoint ?? current.provider.endpoint);
+    const nextPreset = normalizeProviderPreset(providerUpdate.preset ?? providerUpdate.kind ?? current.provider.preset);
+    const presetDefaults = providerDefaultsForPreset(nextPreset);
+    const nextProtocol = normalizeProtocol(presetDefaults?.protocol ?? providerUpdate.protocol ?? current.provider.protocol);
+    const nextEndpoint = normalizeEndpoint(nextProtocol, presetDefaults?.endpoint ?? providerUpdate.endpoint ?? current.provider.endpoint);
     validateProtocolEndpoint(nextProtocol, nextEndpoint);
 
     return {
         ...current,
         provider: {
             ...current.provider,
-            kind: normalizeProviderKind(requestedKind, nextApiKey),
+            preset: nextPreset,
+            kind: providerKindForPreset(nextPreset),
             protocol: nextProtocol,
             endpoint: nextEndpoint,
-            model: stringValue(providerUpdate.model ?? current.provider.model),
+            model: stringValue(providerUpdate.model ?? presetDefaults?.model ?? current.provider.model),
             apiKey: nextApiKey,
             apiKeyHeader: stringValue(providerUpdate.apiKeyHeader ?? current.provider.apiKeyHeader) || 'Authorization',
             apiKeyPrefix: normalizeApiKeyPrefix(providerUpdate.apiKeyPrefix ?? current.provider.apiKeyPrefix),
@@ -197,6 +232,7 @@ export function saveConfigFile(config: AppConfig, cwd = process.cwd(), configure
         port: config.port > 0 ? config.port : 5178,
         logLevel: config.logLevel,
         provider: {
+            preset: config.provider.preset,
             kind: config.provider.kind,
             protocol: config.provider.protocol,
             endpoint: config.provider.endpoint,
@@ -234,6 +270,66 @@ function readConfigFile(cwd: string, configuredPath: string | undefined): RawCon
     }
 
     return parsed as RawConfig;
+}
+
+function resolveProviderPreset(value: unknown, endpoint: unknown, apiKey: string): ProviderPreset {
+    const preset = normalizeProviderPreset(value);
+    if (preset !== 'custom') {
+        return preset;
+    }
+
+    const endpointPreset = presetFromEndpoint(endpoint);
+    if (endpointPreset) {
+        return endpointPreset;
+    }
+
+    return apiKey ? 'custom' : 'mock';
+}
+
+function normalizeProviderPreset(value: unknown): ProviderPreset {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized === 'mock') {
+        return 'mock';
+    }
+    if (normalized === 'openai' || normalized === 'gpt') {
+        return 'openai';
+    }
+    if (normalized === 'deepseek') {
+        return 'deepseek';
+    }
+    return 'custom';
+}
+
+function presetFromEndpoint(value: unknown): ProviderPreset | null {
+    const endpoint = stringValue(value);
+    if (!endpoint) {
+        return null;
+    }
+
+    try {
+        const host = new URL(endpoint).hostname.toLowerCase();
+        if (host === 'api.openai.com') {
+            return 'openai';
+        }
+        if (host.endsWith('deepseek.com')) {
+            return 'deepseek';
+        }
+    } catch {
+        return null;
+    }
+
+    return null;
+}
+
+function providerDefaultsForPreset(preset: ProviderPreset): PresetDefaults | null {
+    if (preset === 'openai' || preset === 'deepseek') {
+        return providerPresetDefaults[preset];
+    }
+    return null;
+}
+
+function providerKindForPreset(preset: ProviderPreset): ProviderKind {
+    return preset === 'mock' ? 'mock' : 'openaiCompatible';
 }
 
 function normalizeProtocol(value: unknown): ProviderProtocol {
@@ -287,17 +383,6 @@ function validateProtocolEndpoint(protocol: ProviderProtocol, endpoint: string):
             throw error;
         }
     }
-}
-
-function normalizeProviderKind(value: string, apiKey: string): ProviderKind {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === 'mock') {
-        return 'mock';
-    }
-    if (normalized === 'openaicompatible' || normalized === 'openai') {
-        return 'openaiCompatible';
-    }
-    return apiKey ? 'openaiCompatible' : 'mock';
 }
 
 function normalizeLogLevel(value: unknown): LogLevel {

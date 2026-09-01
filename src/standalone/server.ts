@@ -48,6 +48,7 @@ export function createAppServer(config: AppConfig, logger: DeveloperLogger): Ser
                 provider = createProvider(runtimeConfig, logger);
                 logger.info('settings.saved', {
                     providerKind: runtimeConfig.provider.kind,
+                    providerPreset: runtimeConfig.provider.preset,
                     protocol: runtimeConfig.provider.protocol,
                     endpoint: runtimeConfig.provider.endpoint,
                     model: runtimeConfig.provider.model,
@@ -172,6 +173,7 @@ export async function startServer(config = loadConfig(), logger = new DeveloperL
                 url,
                 publicDir: serverConfig.publicDir,
                 providerKind: serverConfig.provider.kind,
+                providerPreset: serverConfig.provider.preset,
                 protocol: serverConfig.provider.protocol,
                 model: serverConfig.provider.model,
                 logFile: serverConfig.logFile
@@ -421,6 +423,7 @@ function sendJson(res: ServerResponse, data: unknown, statusCode = 200): void {
 function safeClientConfig(config: AppConfig): SafeClientConfig {
     return {
         providerKind: config.provider.kind,
+        providerPreset: config.provider.preset,
         protocol: config.provider.protocol,
         model: config.provider.model,
         endpoint: config.provider.endpoint,

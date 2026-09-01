@@ -3,10 +3,11 @@
   "port": 5178,
   "logLevel": "debug",
   "provider": {
+    "preset": "openai",
     "kind": "openaiCompatible",
     "protocol": "openai",
     "endpoint": "https://api.openai.com/v1/chat/completions",
-    "model": "gpt-4o-mini",
+    "model": "gpt-5",
     "apiKey": "",
     "apiKeyHeader": "Authorization",
     "apiKeyPrefix": "Bearer ",
