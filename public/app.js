@@ -12,6 +12,7 @@ const VIEWER_MIN_AVAILABLE_WIDTH = 520;
 const PDF_CONTEXT_RADIUS = 1;
 const PAGE_CONTEXT_MAX_CHARS = 9000;
 const PAGE_TURN_COOLDOWN_MS = 360;
+const FILE_PANEL_TRANSITION_MS = 220;
 const MAX_IMAGE_ATTACHMENTS = 4;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const PAGE_IMAGE_MAX_EDGE = 1800;
@@ -191,6 +192,8 @@ const state = {
     activeReadingFileId: '',
     readingFileMenuId: '',
     readingFilePanelMessage: '',
+    filePanelCloseTimer: 0,
+    filePanelAnimationFrame: 0,
     pendingAnnotationSelection: null,
     selectionActionsSnapshot: null,
     visualSelection: null,
@@ -680,15 +683,44 @@ function setApiKeyState(message, tone) {
     elements.apiKeyState.classList.toggle('is-warning', tone === 'warning');
 }
 
-function setFilePanelOpen(open) {
-    elements.filePanel.hidden = !open;
-    elements.filePanelBackdrop.hidden = !open;
+function setFilePanelOpen(open, options = {}) {
+    window.clearTimeout(state.filePanelCloseTimer);
+    window.cancelAnimationFrame(state.filePanelAnimationFrame);
     elements.filePanelToggle.setAttribute('aria-expanded', String(open));
     elements.filePanelToggle.classList.toggle('active-tool', open);
     hideReadingFileContextMenu();
+
     if (open) {
-        void loadReadingFiles();
+        elements.filePanel.hidden = false;
+        elements.filePanelBackdrop.hidden = false;
+        elements.filePanel.setAttribute('aria-hidden', 'false');
+        elements.filePanelBackdrop.setAttribute('aria-hidden', 'false');
+        state.filePanelAnimationFrame = window.requestAnimationFrame(() => {
+            elements.filePanel.classList.add('is-open');
+            elements.filePanelBackdrop.classList.add('is-open');
+        });
+        if (options.refresh !== false) {
+            void loadReadingFiles();
+        }
+        return;
     }
+
+    const wasVisible = !elements.filePanel.hidden;
+    elements.filePanel.classList.remove('is-open');
+    elements.filePanelBackdrop.classList.remove('is-open');
+    elements.filePanel.setAttribute('aria-hidden', 'true');
+    elements.filePanelBackdrop.setAttribute('aria-hidden', 'true');
+
+    if (!wasVisible) {
+        elements.filePanel.hidden = true;
+        elements.filePanelBackdrop.hidden = true;
+        return;
+    }
+
+    state.filePanelCloseTimer = window.setTimeout(() => {
+        elements.filePanel.hidden = true;
+        elements.filePanelBackdrop.hidden = true;
+    }, FILE_PANEL_TRANSITION_MS);
 }
 
 async function loadReadingFiles() {
@@ -794,7 +826,7 @@ async function onReadingFilePicked(event) {
             throw new Error('Invalid import response.');
         }
         upsertReadingFile(importedFile);
-        await openReadingFileById(importedFile.id);
+        await openReadingFileById(importedFile.id, { closePanelOnStart: true });
         logClient('reading_file.import.done', { id: importedFile.id, title: importedFile.title });
     } catch (error) {
         showReadingFilePanelMessage(`PDF 导入失败：${messageOf(error)}`);
@@ -812,7 +844,7 @@ function onReadingFileListClick(event) {
         return;
     }
     hideReadingFileContextMenu();
-    void openReadingFileById(item.dataset.id || '');
+    void openReadingFileById(item.dataset.id || '', { closePanelOnStart: true });
 }
 
 function onReadingFileContextMenu(event) {
@@ -893,7 +925,7 @@ function readingFileItemFromEvent(event) {
     return event.target instanceof Element ? event.target.closest('.reading-file-item') : null;
 }
 
-async function openReadingFileById(id) {
+async function openReadingFileById(id, options = {}) {
     const readingFileId = String(id || '').trim();
     if (!readingFileId) {
         return;
@@ -911,6 +943,10 @@ async function openReadingFileById(id) {
     };
     setBusy(true, '打开阅读文件');
     logClient('reading_file.open.start', { id: readingFileId, title: file.title });
+    const shouldReopenPanelOnError = options.closePanelOnStart === true && !elements.filePanel.hidden;
+    if (options.closePanelOnStart === true) {
+        setFilePanelOpen(false);
+    }
     try {
         await flushPendingAnnotationSave();
         const [pdfResponse, notesResponse] = await Promise.all([
@@ -925,11 +961,13 @@ async function openReadingFileById(id) {
             readingFileId,
             annotations: isPlainObject(notesPayload.notes) ? notesPayload.notes : {}
         });
-        setFilePanelOpen(false);
         renderReadingFileList();
         logClient('reading_file.open.done', { id: readingFileId, title: file.title });
     } catch (error) {
         showReadingFilePanelMessage(`阅读文件打开失败：${messageOf(error)}`);
+        if (shouldReopenPanelOnError) {
+            setFilePanelOpen(true, { refresh: false });
+        }
         logClient('reading_file.open.error', { id: readingFileId, message: messageOf(error) });
     } finally {
         setBusy(false);

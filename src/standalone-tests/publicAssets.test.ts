@@ -195,6 +195,20 @@ test('front-end uses a minimal reading file panel for imports and document list'
     assert.ok(stylesCss.includes('.reading-file-context-menu'));
 });
 
+test('front-end slides the file panel away before loading a selected reading file', () => {
+    assert.ok(appJs.includes('const FILE_PANEL_TRANSITION_MS = 220'));
+    assert.ok(appJs.includes('window.requestAnimationFrame'));
+    assert.ok(appJs.includes("elements.filePanel.classList.add('is-open')"));
+    assert.ok(appJs.includes("elements.filePanel.classList.remove('is-open')"));
+    assert.ok(appJs.includes("void openReadingFileById(item.dataset.id || '', { closePanelOnStart: true })"));
+    assert.ok(appJs.includes("await openReadingFileById(importedFile.id, { closePanelOnStart: true })"));
+    assert.ok(appJs.includes("setFilePanelOpen(true, { refresh: false })"));
+    assert.ok(stylesCss.includes('.file-panel.is-open'));
+    assert.ok(stylesCss.includes('.file-panel-backdrop.is-open'));
+    assert.ok(stylesCss.includes('transform: translateX(calc(-100% - 16px));'));
+    assert.ok(stylesCss.includes('transition:'));
+});
+
 test('front-end keeps zoom lightweight through Ctrl wheel', () => {
     assert.ok(appJs.includes('const MIN_SCALE = 0.05'));
     assert.ok(appJs.includes('const MAX_SCALE = 5.0'));
