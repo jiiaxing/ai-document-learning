@@ -88,13 +88,14 @@ class OpenAICompatibleStreamingProvider implements StreamingAiProvider {
         const images = request.images ?? [];
         const body = provider.protocol === 'anthropic'
             ? buildAnthropicBody(messages, provider, images)
-            : buildOpenAiBody(messages, provider, images);
+            : buildOpenAiBody(messages, provider, request, images);
 
         this.logger.info('provider.http.start', {
             preset: provider.preset,
             protocol: provider.protocol,
             endpoint: provider.endpoint,
             model: provider.model,
+            mode: request.mode ?? 'explain',
             imageCount: images.length
         });
 
@@ -149,15 +150,15 @@ class OpenAICompatibleStreamingProvider implements StreamingAiProvider {
 
 function buildMessages(config: AppConfig, request: ExplainRequest): ChatMessage[] {
     const text = truncateText(request.text, config.maxSelectionChars);
-    const pageContext = truncateText(request.pageContext ?? '', config.maxSelectionChars * 3);
+    const pageContext = truncateText(request.pageContext ?? '', pageContextLimitForRequest(config, request));
     const selectionContext = truncateText(request.selectionContext ?? '', config.maxSelectionChars);
     const source = request.source?.trim() || 'PDF selection';
-    const imageInstruction = buildImageInstruction(request.images ?? []);
     const basePrompt = request.mode === 'translate'
         ? renderTemplate(config.translatePromptTemplate, {
             text,
             source,
             pageContext,
+            selectionContext,
             question: ''
         })
         : request.mode === 'ask'
@@ -172,20 +173,21 @@ function buildMessages(config: AppConfig, request: ExplainRequest): ChatMessage[
             selection: text,
             question: request.question.trim(),
             source,
-            pageContext
+            pageContext,
+            selectionContext
         })
         : renderTemplate(config.explainPromptTemplate, {
             text,
             source,
             pageContext,
+            selectionContext,
             question: ''
         });
-    const userPrompt = `${basePrompt}${imageInstruction}`;
 
     return [
         { role: 'system', content: config.systemPrompt },
         ...(request.history ?? []).slice(-6),
-        { role: 'user', content: userPrompt }
+        { role: 'user', content: basePrompt }
     ];
 }
 
@@ -196,7 +198,7 @@ function buildAskPrompt(values: {
     selectionContext: string;
 }): string {
     return [
-        '请回答用户的自由提问。不要默认把它当成“继续追问选区”，也不要强制限定在选区内。',
+        '请回答用户的自由提问。基于用户提供的文本、截图、附件和 PDF 上下文回答；不要默认把问题当成“继续追问选区”，也不要强制限定在选区内。',
         '',
         '## 来源',
         values.source,
@@ -213,25 +215,19 @@ function buildAskPrompt(values: {
         '## 输出要求',
         '1. 直接回答用户问题。',
         '2. 只有当用户问题明确要求结合 PDF、选区或上下文时，才使用这些参考。',
-        '3. 如果问题主要关于图片，请以图片内容为主回答。',
-        '4. 使用 Markdown，必要时保留关键英文原词并给出中文解释。',
-        '5. 不要声称看到了不存在的信息；上下文或图片信息不足时要明确说明。'
+        '3. 使用 Markdown，必要时保留关键英文原词并给出中文解释。',
+        '4. 不要编造未提供或不可见的信息；信息不足时直接说明缺少哪些依据。'
     ].join('\n');
 }
 
-function buildImageInstruction(images: ImageAttachment[]): string {
-    if (!images.length) {
-        return '';
+function pageContextLimitForRequest(config: AppConfig, request: ExplainRequest): number {
+    if (request.mode === 'translate') {
+        return Math.min(config.maxSelectionChars, 1800);
     }
-
-    return [
-        '',
-        '',
-        '## 图片附件',
-        `本次请求附带 ${images.length} 张图片：${images.map((image) => image.name).join(', ')}。`,
-        '请直接读取并理解图片内容，再结合用户问题回答。',
-        '如果当前模型或接口无法访问图片内容，请明确说“我无法读取这张图片”，不要假装已经看到了图片。'
-    ].join('\n');
+    if (request.mode === 'explain' && !request.images?.length) {
+        return Math.min(config.maxSelectionChars, 2800);
+    }
+    return Math.min(config.maxSelectionChars * 2, 9000);
 }
 
 type OpenAiContentPart =
@@ -252,7 +248,7 @@ type AnthropicMessage = {
     content: string | AnthropicContentPart[];
 };
 
-function buildOpenAiBody(messages: ChatMessage[], provider: ProviderConfig, images: ImageAttachment[] = []): Record<string, unknown> {
+function buildOpenAiBody(messages: ChatMessage[], provider: ProviderConfig, request: ExplainRequest, images: ImageAttachment[] = []): Record<string, unknown> {
     const converted: OpenAiMessage[] = messages.map((message) => ({
         role: message.role,
         content: message.content
@@ -264,8 +260,40 @@ function buildOpenAiBody(messages: ChatMessage[], provider: ProviderConfig, imag
         temperature: 0.2,
         stream: true,
         messages: converted,
+        ...openAiRequestDefaults(provider, request),
         ...provider.extraBody
     };
+}
+
+function openAiRequestDefaults(provider: ProviderConfig, request: ExplainRequest): Record<string, unknown> {
+    if (provider.preset === 'deepseek') {
+        return {
+            thinking: { type: deepSeekThinkingType(provider, request) },
+            max_tokens: maxTokensForRequest(request)
+        };
+    }
+    return {};
+}
+
+function deepSeekThinkingType(provider: ProviderConfig, request: ExplainRequest): 'enabled' | 'disabled' {
+    const enabled = request.mode === 'translate'
+        ? provider.deepSeekThinkingTranslate
+        : provider.deepSeekThinkingExplain;
+    return enabled ? 'enabled' : 'disabled';
+}
+
+function maxTokensForRequest(request: ExplainRequest): number {
+    const textLength = request.text.length;
+    if (request.mode === 'translate') {
+        return clampNumber(260 + Math.ceil(textLength * 0.9), 320, 1200);
+    }
+    return request.images?.length
+        ? 1100
+        : clampNumber(460 + Math.ceil(textLength * 0.45), 560, 900);
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
 }
 
 function buildAnthropicBody(messages: ChatMessage[], provider: ProviderConfig, images: ImageAttachment[] = []): Record<string, unknown> {
@@ -410,6 +438,9 @@ async function *readSseDeltas(
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    const startedAt = Date.now();
+    let chunks = 0;
+    let characters = 0;
 
     while (true) {
         const { done, value } = await reader.read();
@@ -426,9 +457,24 @@ async function *readSseDeltas(
             if (!delta) {
                 continue;
             }
-            logger.debug('provider.http.chunk', { length: delta.length });
+            chunks += 1;
+            characters += delta.length;
+            if (chunks === 1) {
+                logger.debug('provider.http.first_delta', {
+                    elapsedMs: Date.now() - startedAt,
+                    length: delta.length
+                });
+            }
             yield delta;
         }
+    }
+
+    if (chunks > 0) {
+        logger.debug('provider.http.stream_summary', {
+            chunks,
+            characters,
+            elapsedMs: Date.now() - startedAt
+        });
     }
 }
 

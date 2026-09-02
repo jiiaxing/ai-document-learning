@@ -33,6 +33,8 @@ export interface ProviderConfig {
     extraHeaders: Record<string, string>;
     extraBody: Record<string, unknown>;
     mockChunkDelayMs: number;
+    deepSeekThinkingTranslate: boolean;
+    deepSeekThinkingExplain: boolean;
 }
 
 export interface AppConfig {
@@ -88,6 +90,8 @@ export interface PublicSettings {
         anthropicMaxTokens: number;
         extraHeadersJson: string;
         extraBodyJson: string;
+        deepSeekThinkingTranslate: boolean;
+        deepSeekThinkingExplain: boolean;
     };
     systemPrompt: string;
     explainPromptTemplate: string;
@@ -113,6 +117,8 @@ export interface SettingsUpdate {
         anthropicMaxTokens?: number;
         extraHeadersJson?: string;
         extraBodyJson?: string;
+        deepSeekThinkingTranslate?: boolean;
+        deepSeekThinkingExplain?: boolean;
     };
     systemPrompt?: string;
     explainPromptTemplate?: string;

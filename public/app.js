@@ -11,7 +11,9 @@ const MIN_INITIAL_SCALE = 0.8;
 const MAX_SCALE = 5.0;
 const VIEWER_MIN_AVAILABLE_WIDTH = 520;
 const PDF_CONTEXT_RADIUS = 1;
-const PAGE_CONTEXT_MAX_CHARS = 9000;
+const PAGE_CONTEXT_MAX_CHARS = 5200;
+const SELECTION_CONTEXT_RADIUS = 0;
+const SELECTION_CONTEXT_MAX_CHARS = 2400;
 const PAGE_TURN_COOLDOWN_MS = 360;
 const FILE_PANEL_TRANSITION_MS = 220;
 const ACTION_MENU_GAP = 12;
@@ -24,6 +26,12 @@ const ZOOM_PREVIEW_EPSILON = 0.001;
 const NOTE_DEFAULT_FONT_SIZE = 15;
 const NOTE_MIN_FONT_SIZE = 6;
 const NOTE_MAX_FONT_SIZE = 72;
+const NOTE_RENDER_MIN_FONT_SIZE = 1;
+const NOTE_RENDER_MAX_FONT_SIZE = 320;
+const ANNOTATION_MIN_RECT_AREA = 0.0000008;
+const ERASER_HIT_RADIUS_PX = 12;
+const SELECTION_RECT_LINE_TOLERANCE = 0.004;
+const SELECTION_RECT_MERGE_GAP = 0.0025;
 const MAX_IMAGE_ATTACHMENTS = 4;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const PAGE_IMAGE_MAX_EDGE = 1800;
@@ -31,6 +39,8 @@ const VISUAL_SELECTION_MIN_RATIO = 0.012;
 const VISUAL_SELECTION_PADDING_RATIO = 0.012;
 const READER_MODE_SINGLE = 'single';
 const READER_MODE_CONTINUOUS = 'continuous';
+const THEME_LIGHT = 'light';
+const THEME_DARK = 'dark';
 const VISUAL_SELECTION_STYLE_BOX = 'box';
 const VISUAL_SELECTION_STYLE_PATH = 'path';
 const LEGACY_TRANSLATION_PANE_WIDTH = 320;
@@ -119,6 +129,9 @@ const elements = {
     responseTextPath: document.getElementById('responseTextPath'),
     maxSelectionChars: document.getElementById('maxSelectionChars'),
     visualSelectionStyle: document.getElementById('visualSelectionStyle'),
+    darkMode: document.getElementById('darkMode'),
+    deepSeekThinkingTranslate: document.getElementById('deepSeekThinkingTranslate'),
+    deepSeekThinkingExplain: document.getElementById('deepSeekThinkingExplain'),
     anthropicVersion: document.getElementById('anthropicVersion'),
     anthropicMaxTokens: document.getElementById('anthropicMaxTokens'),
     extraHeadersJson: document.getElementById('extraHeadersJson'),
@@ -147,13 +160,7 @@ const elements = {
     pageInfo: document.getElementById('pageInfo'),
     autoTranslate: document.getElementById('autoTranslate'),
     autoExplain: document.getElementById('autoExplain'),
-    addHighlight: document.getElementById('addHighlight'),
-    undoHighlight: document.getElementById('undoHighlight'),
     addNote: document.getElementById('addNote'),
-    noteFontDown: document.getElementById('noteFontDown'),
-    noteFontUp: document.getElementById('noteFontUp'),
-    noteFontInput: document.getElementById('noteFontInput'),
-    deleteNote: document.getElementById('deleteNote'),
     lineMode: document.getElementById('lineMode'),
     eraserMode: document.getElementById('eraserMode'),
     clearPageAnnotations: document.getElementById('clearPageAnnotations'),
@@ -185,6 +192,7 @@ const elements = {
 
 const selectionGate = new SelectionGate({ minLength: 6, cooldownMs: 700 });
 const initialUiPrefs = loadUiPrefs();
+applyDocumentTheme(initialUiPrefs.theme);
 const state = {
     settings: null,
     apiKeyTouched: false,
@@ -213,6 +221,7 @@ const state = {
     editingNoteId: '',
     noteEditGuardUntil: 0,
     lineDraft: null,
+    eraserPointerId: null,
     noteDrag: null,
     paneResize: null,
     lastPageTurnAt: 0,
@@ -287,18 +296,18 @@ function wireEvents() {
     elements.pageSlider.addEventListener('change', onPageSliderChange);
     elements.readerMode.addEventListener('change', onReaderModeChanged);
     elements.visualSelectionStyle.addEventListener('change', onVisualSelectionStyleChanged);
+    elements.darkMode.addEventListener('change', onThemeModeChanged);
     elements.autoTranslate.addEventListener('change', onAutoTriggerChanged);
     elements.autoExplain.addEventListener('change', onAutoTriggerChanged);
-    elements.addHighlight.addEventListener('click', addHighlightFromSelection);
-    elements.undoHighlight.addEventListener('click', undoLastHighlight);
     elements.addNote.addEventListener('click', addNoteFromSelection);
-    elements.noteFontDown.addEventListener('click', () => adjustSelectedNoteFont(-1));
-    elements.noteFontUp.addEventListener('click', () => adjustSelectedNoteFont(1));
-    elements.noteFontInput.addEventListener('change', applyTypedNoteFont);
-    elements.noteFontInput.addEventListener('keydown', onNoteFontInputKeydown);
-    elements.deleteNote.addEventListener('click', deleteSelectedNote);
-    elements.lineMode.addEventListener('change', onLineModeChanged);
-    elements.eraserMode.addEventListener('change', onEraserModeChanged);
+    elements.lineMode.addEventListener('click', () => {
+        elements.lineMode.checked = !elements.lineMode.checked;
+        onLineModeChanged();
+    });
+    elements.eraserMode.addEventListener('click', () => {
+        elements.eraserMode.checked = !elements.eraserMode.checked;
+        onEraserModeChanged();
+    });
     elements.clearPageAnnotations.addEventListener('click', clearCurrentPageAnnotations);
     elements.viewer.addEventListener('click', focusViewerUnlessInteractive);
     elements.viewer.addEventListener('contextmenu', onViewerContextMenu);
@@ -358,7 +367,7 @@ function focusViewerUnlessInteractive(event) {
 
 function isInteractiveTarget(target) {
     return target instanceof HTMLElement
-        && Boolean(target.closest('button, input, textarea, select, [contenteditable="true"], .annotation-note-box'));
+        && Boolean(target.closest('button, input, textarea, select, [contenteditable="true"], .annotation-note-box, .annotation-note-toolbar'));
 }
 
 function setPaneCollapsed(pane, collapsed) {
@@ -463,7 +472,8 @@ function onDocumentPointerDown(event) {
     const target = event.target;
     if (target instanceof Node) {
         const activeNoteBox = elements.page.querySelector(`.annotation-note-box[data-annotation-id="${cssEscape(state.editingNoteId)}"]`);
-        if (activeNoteBox?.contains(target)) {
+        const activeNoteToolbar = elements.page.querySelector(`.annotation-note-toolbar[data-annotation-id="${cssEscape(state.editingNoteId)}"]`);
+        if (activeNoteBox?.contains(target) || activeNoteToolbar?.contains(target)) {
             return;
         }
     }
@@ -548,7 +558,9 @@ async function saveSettings(event) {
             anthropicVersion: elements.anthropicVersion.value.trim(),
             anthropicMaxTokens: Number(elements.anthropicMaxTokens.value),
             extraHeadersJson: elements.extraHeadersJson.value,
-            extraBodyJson: elements.extraBodyJson.value
+            extraBodyJson: elements.extraBodyJson.value,
+            deepSeekThinkingTranslate: elements.deepSeekThinkingTranslate.checked,
+            deepSeekThinkingExplain: elements.deepSeekThinkingExplain.checked
         },
         maxSelectionChars: Number(elements.maxSelectionChars.value),
         systemPrompt: elements.systemPrompt.value,
@@ -590,6 +602,8 @@ function applySettingsToForm(settings) {
     elements.apiKeyPrefix.value = settings.provider.apiKeyPrefix;
     elements.responseTextPath.value = settings.provider.responseTextPath;
     elements.maxSelectionChars.value = String(settings.maxSelectionChars);
+    elements.deepSeekThinkingTranslate.checked = Boolean(settings.provider.deepSeekThinkingTranslate);
+    elements.deepSeekThinkingExplain.checked = Boolean(settings.provider.deepSeekThinkingExplain);
     elements.anthropicVersion.value = settings.provider.anthropicVersion;
     elements.anthropicMaxTokens.value = String(settings.provider.anthropicMaxTokens);
     elements.extraHeadersJson.value = settings.provider.extraHeadersJson;
@@ -644,6 +658,7 @@ function applyProviderPresetDefaults(preset) {
 function updateProviderFields() {
     const preset = elements.providerKind.value;
     const isMock = preset === 'mock';
+    const isDeepSeek = preset === 'deepseek';
     const isManagedPreset = preset === 'openai' || preset === 'deepseek';
     elements.protocol.disabled = isMock || isManagedPreset;
     elements.endpoint.disabled = isMock || isManagedPreset;
@@ -653,6 +668,8 @@ function updateProviderFields() {
     elements.apiKeyHeader.disabled = isMock || isManagedPreset;
     elements.apiKeyPrefix.disabled = isMock || isManagedPreset;
     elements.responseTextPath.disabled = isMock || isManagedPreset;
+    elements.deepSeekThinkingTranslate.disabled = !isDeepSeek;
+    elements.deepSeekThinkingExplain.disabled = !isDeepSeek;
     updateApiKeyState();
 }
 
@@ -783,6 +800,7 @@ function renderReadingFileList(emptyMessage = '暂无阅读文件') {
         item.dataset.id = file.id;
         item.setAttribute('role', 'listitem');
         item.setAttribute('aria-current', String(state.activeReadingFileId === file.id));
+        item.title = `打开 ${file.title}`;
 
         const title = document.createElement('span');
         title.className = 'reading-file-title';
@@ -1124,6 +1142,7 @@ async function renderPage(options = {}) {
             state.renderedScale = renderScale;
             clearSmoothZoomPreviewStyles();
             if (Math.abs(state.scale - renderScale) > ZOOM_PREVIEW_EPSILON) {
+                queueSmoothZoomPreview(state.pendingZoomAnchor);
                 scheduleSmoothZoomRender('queued-zoom');
             }
         }
@@ -1146,20 +1165,22 @@ async function renderSinglePage(renderScale = state.scale) {
 
 async function renderContinuousPages(options = {}, renderScale = state.scale) {
     const pageCount = state.pdfDoc.numPages;
-    elements.page.className = 'page-stack';
-    elements.page.removeAttribute('data-page');
-    elements.page.style.width = '';
-    elements.page.style.height = '';
-    elements.page.innerHTML = '';
+    const fragment = document.createDocumentFragment();
     logClient('pdf.continuous.render.start', { pages: pageCount, scale: renderScale });
 
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
         const pageNode = document.createElement('div');
         pageNode.className = 'page-wrap';
         pageNode.dataset.page = String(pageNumber);
-        elements.page.appendChild(pageNode);
+        fragment.appendChild(pageNode);
         await renderPdfPage(pageNumber, pageNode, renderScale);
     }
+
+    elements.page.className = 'page-stack';
+    elements.page.removeAttribute('data-page');
+    elements.page.style.width = '';
+    elements.page.style.height = '';
+    elements.page.replaceChildren(fragment);
 
     const restoredZoomAnchor = restoreZoomAnchor(options.zoomAnchor);
     if (restoredZoomAnchor) {
@@ -1183,11 +1204,13 @@ async function renderPdfPage(pageNumber, pageNode, renderScale = state.scale) {
     pageNode.style.height = `${viewport.height}px`;
     pageNode.dataset.renderedWidth = String(viewport.width);
     pageNode.dataset.renderedHeight = String(viewport.height);
+    pageNode.dataset.renderScale = String(renderScale);
 
     const pageContent = document.createElement('div');
     pageContent.className = 'page-content';
     pageContent.style.width = `${viewport.width}px`;
     pageContent.style.height = `${viewport.height}px`;
+    pageContent.style.setProperty('--pdf-zoom-ratio', String(renderScale / DEFAULT_SCALE));
     pageNode.appendChild(pageContent);
 
     const canvas = document.createElement('canvas');
@@ -1350,6 +1373,8 @@ function applyPagePreviewScale(pageNode, previewRatio) {
     if (!baseWidth || !baseHeight || !pageContent) {
         return;
     }
+    pageNode.style.width = `${baseWidth * previewRatio}px`;
+    pageNode.style.height = `${baseHeight * previewRatio}px`;
     pageContent.style.width = `${baseWidth}px`;
     pageContent.style.height = `${baseHeight}px`;
     pageContent.style.transformOrigin = '0 0';
@@ -1506,6 +1531,13 @@ function onVisualSelectionStyleChanged() {
     logClient('visual.selection.style', { style: visualSelectionStyle() });
 }
 
+function onThemeModeChanged() {
+    state.uiPrefs.theme = elements.darkMode.checked ? THEME_DARK : THEME_LIGHT;
+    applyDocumentTheme(state.uiPrefs.theme);
+    saveUiPrefs();
+    logClient('ui.theme.changed', { theme: state.uiPrefs.theme });
+}
+
 async function jumpToPageNumber(pageNumber, trigger) {
     if (!state.pdfDoc) {
         return;
@@ -1556,7 +1588,7 @@ function onLineModeChanged() {
         cancelNotePlacement('line-mode');
         elements.eraserMode.checked = false;
         elements.page.classList.add('line-drawing-active');
-        flashStatus('线条模式：在 PDF 上拖动绘制自由线条');
+        flashStatus('绘制模式：在 PDF 上拖动绘制自由线条');
     } else {
         elements.page.classList.remove('line-drawing-active');
         cancelLineDraft();
@@ -1584,6 +1616,7 @@ function onEraserModeChanged() {
 function resetTransientAnnotationTools() {
     elements.lineMode.checked = false;
     elements.eraserMode.checked = false;
+    state.eraserPointerId = null;
     elements.page.classList.remove('line-drawing-active', 'note-placement-active', 'eraser-active');
     state.uiPrefs.lineMode = false;
     state.uiPrefs.eraserMode = false;
@@ -1872,20 +1905,25 @@ async function probeSelection(reason, actionAnchor = null) {
         void translateSelection(gate.normalizedText, source);
     }
     if (autoExplainEnabled) {
-        const pageContext = await buildPageContext(selectionSnapshot.page);
+        const pageContext = await buildSelectionPageContext(selectionSnapshot.page);
         void explainSelection(gate.normalizedText, source, pageContext);
     }
     window.getSelection()?.removeAllRanges();
 }
 
 function getPdfSelectionText() {
-    return getPdfSelectionSnapshot()?.text || '';
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !selectionContainsPdfText(selection)) {
+        return '';
+    }
+    return normalizeSelectionText(selection.toString());
 }
 
 function showSelectionActions(selectionSnapshot) {
     state.selectionActionsSnapshot = selectionSnapshot;
-    const canExplain = Boolean(selectionSnapshot?.text) && !elements.autoExplain.checked;
-    const canTranslate = Boolean(selectionSnapshot?.text) && !elements.autoTranslate.checked;
+    const hasTextSelection = Boolean(selectionSnapshot?.text && selectionSnapshot?.rects?.length);
+    const canExplain = hasTextSelection && !elements.autoExplain.checked;
+    const canTranslate = hasTextSelection && !elements.autoTranslate.checked;
     elements.selectionExplain.hidden = !canExplain;
     elements.selectionTranslate.hidden = !canTranslate;
     elements.selectionExplain.disabled = !canExplain;
@@ -2106,7 +2144,7 @@ async function explainSelectionFromAction(event) {
         page: selection.page,
         textLength: selection.text.length
     });
-    const pageContext = await buildPageContext(selection.page);
+    const pageContext = await buildSelectionPageContext(selection.page);
     await explainSelection(selection.text, source, pageContext);
 }
 
@@ -2138,10 +2176,7 @@ function getPdfSelectionSnapshot(actionAnchor = null) {
         return null;
     }
 
-    if (!nodeInsideTextLayer(selection.anchorNode) || !nodeInsideTextLayer(selection.focusNode)) {
-        return null;
-    }
-    const pageNode = pageElementFromNode(selection.anchorNode) || pageElementFromNode(selection.focusNode);
+    const pageNode = pageElementFromSelection(selection);
     const pageNumber = Number(pageNode?.dataset.page || state.currentPage);
     if (!pageNode || !Number.isFinite(pageNumber)) {
         return null;
@@ -2153,16 +2188,7 @@ function getPdfSelectionSnapshot(actionAnchor = null) {
     }
 
     const pageRect = pageNode.getBoundingClientRect();
-    const rects = [];
-    for (let index = 0; index < selection.rangeCount; index += 1) {
-        const range = selection.getRangeAt(index);
-        for (const rect of Array.from(range.getClientRects())) {
-            const clipped = rectToPageRatio(rect, pageRect);
-            if (clipped) {
-                rects.push(clipped);
-            }
-        }
-    }
+    const rects = selectionRectsForPage(selection, pageNode, pageRect);
 
     if (rects.length === 0) {
         return null;
@@ -2171,8 +2197,160 @@ function getPdfSelectionSnapshot(actionAnchor = null) {
     return {
         page: pageNumber,
         text,
-        rects: compactAnnotationRects(rects),
+        rects,
         actionAnchor: actionAnchorForSelection(actionAnchor, pageNumber, pageNode)
+    };
+}
+
+function selectionContainsPdfText(selection) {
+    if (nodeInsideTextLayer(selection.anchorNode) || nodeInsideTextLayer(selection.focusNode)) {
+        return true;
+    }
+    return Boolean(pageElementFromSelection(selection));
+}
+
+function pageElementFromSelection(selection) {
+    const directPage = pageElementFromNode(selection.anchorNode) || pageElementFromNode(selection.focusNode);
+    if (directPage) {
+        return directPage;
+    }
+    const textLayers = Array.from(elements.page.querySelectorAll('.textLayer'));
+    for (let index = 0; index < selection.rangeCount; index += 1) {
+        const range = selection.getRangeAt(index);
+        const textLayer = textLayers.find((layer) => selectionRangeIntersectsNode(range, layer));
+        const pageNode = textLayer ? pageElementFromNode(textLayer) : null;
+        if (pageNode) {
+            return pageNode;
+        }
+    }
+    return null;
+}
+
+function selectionRectsForPage(selection, pageNode, pageRect) {
+    const textRects = selectedTextNodeRectsForPage(selection, pageNode, pageRect);
+    if (textRects.length) {
+        return textRects;
+    }
+    return fallbackSelectionRects(selection, pageRect);
+}
+
+function selectedTextNodeRectsForPage(selection, pageNode, pageRect) {
+    const textLayer = pageNode.querySelector('.textLayer');
+    if (!textLayer || !pageRect.width || !pageRect.height) {
+        return [];
+    }
+    const rects = [];
+    for (let index = 0; index < selection.rangeCount; index += 1) {
+        const selectionRange = selection.getRangeAt(index);
+        const walker = document.createTreeWalker(textLayer, NodeFilter.SHOW_TEXT);
+        let textNode = walker.nextNode();
+        while (textNode) {
+            const textRange = selectedTextRangeForTextNode(selectionRange, textNode);
+            if (textRange) {
+                const textBounds = textNode.parentElement?.getBoundingClientRect();
+                appendClientRectsAsPageRects(rects, textRange.getClientRects(), pageRect, textBounds);
+                textRange.detach?.();
+            }
+            textNode = walker.nextNode();
+        }
+    }
+    return compactAnnotationRects(rects);
+}
+
+function selectedTextRangeForTextNode(selectionRange, textNode) {
+    const text = textNode.nodeValue || '';
+    if (!text.trim() || !selectionRangeIntersectsNode(selectionRange, textNode)) {
+        return null;
+    }
+    const offsets = selectedTextOffsetsForTextNode(selectionRange, textNode);
+    if (!offsets || offsets.start >= offsets.end) {
+        return null;
+    }
+    const textRange = document.createRange();
+    textRange.setStart(textNode, offsets.start);
+    textRange.setEnd(textNode, offsets.end);
+    if (!normalizeSelectionText(textRange.toString())) {
+        textRange.detach?.();
+        return null;
+    }
+    return textRange;
+}
+
+function selectedTextOffsetsForTextNode(selectionRange, textNode) {
+    const length = (textNode.nodeValue || '').length;
+    let start = 0;
+    let end = length;
+
+    if (selectionRange.startContainer === textNode) {
+        start = clamp(selectionRange.startOffset, 0, length);
+    } else {
+        while (start < length && comparePointToRange(selectionRange, textNode, start) < 0) {
+            start += 1;
+        }
+    }
+
+    if (selectionRange.endContainer === textNode) {
+        end = clamp(selectionRange.endOffset, 0, length);
+    } else {
+        while (end > start && comparePointToRange(selectionRange, textNode, end) > 0) {
+            end -= 1;
+        }
+    }
+
+    return start < end ? { start, end } : null;
+}
+
+function selectionRangeIntersectsNode(selectionRange, node) {
+    try {
+        return selectionRange.intersectsNode(node);
+    } catch {
+        return false;
+    }
+}
+
+function comparePointToRange(selectionRange, node, offset) {
+    try {
+        return selectionRange.comparePoint(node, offset);
+    } catch {
+        return 0;
+    }
+}
+
+function fallbackSelectionRects(selection, pageRect) {
+    const rects = [];
+    for (let index = 0; index < selection.rangeCount; index += 1) {
+        appendClientRectsAsPageRects(rects, selection.getRangeAt(index).getClientRects(), pageRect);
+    }
+    return compactAnnotationRects(rects);
+}
+
+function appendClientRectsAsPageRects(target, clientRects, pageRect, clipBounds = null) {
+    for (const rect of Array.from(clientRects)) {
+        const clippedClientRect = clipBounds ? intersectClientRects(rect, clipBounds) : rect;
+        const clippedPageRect = clippedClientRect ? rectToPageRatio(clippedClientRect, pageRect) : null;
+        if (clippedPageRect) {
+            target.push(clippedPageRect);
+        }
+    }
+}
+
+function intersectClientRects(left, right) {
+    const leftX = Math.max(left.left, right.left);
+    const top = Math.max(left.top, right.top);
+    const rightX = Math.min(left.right, right.right);
+    const bottom = Math.min(left.bottom, right.bottom);
+    const width = rightX - leftX;
+    const height = bottom - top;
+    if (width < 1 || height < 1) {
+        return null;
+    }
+    return {
+        left: leftX,
+        top,
+        right: rightX,
+        bottom,
+        width,
+        height
     };
 }
 
@@ -2241,20 +2419,150 @@ function rectToPageRatio(rect, pageRect) {
 }
 
 function compactAnnotationRects(rects) {
+    const normalizedRects = dedupeAnnotationRects((rects || [])
+        .map(normalizeAnnotationRect)
+        .filter(isMeaningfulRect));
+    if (normalizedRects.length <= 1) {
+        return normalizedRects;
+    }
+    return groupRectsIntoLines(normalizedRects)
+        .flatMap((line) => mergeRectsInLine(line.rects))
+        .map(roundRect)
+        .filter(isMeaningfulRect)
+        .slice(0, 80);
+}
+
+function normalizeAnnotationRect(rect) {
+    if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y)
+        || !Number.isFinite(rect.width) || !Number.isFinite(rect.height)) {
+        return null;
+    }
+    const left = clamp(rect.x, 0, 1);
+    const top = clamp(rect.y, 0, 1);
+    const right = clamp(rect.x + rect.width, 0, 1);
+    const bottom = clamp(rect.y + rect.height, 0, 1);
+    return roundRect({
+        x: Math.min(left, right),
+        y: Math.min(top, bottom),
+        width: Math.abs(right - left),
+        height: Math.abs(bottom - top)
+    });
+}
+
+function dedupeAnnotationRects(rects) {
     const seen = new Set();
-    return rects.filter((rect) => {
+    const uniqueRects = [];
+    for (const rect of rects) {
         const key = [
-            Math.round(rect.x * 1000),
-            Math.round(rect.y * 1000),
-            Math.round(rect.width * 1000),
-            Math.round(rect.height * 1000)
+            rect.x.toFixed(5),
+            rect.y.toFixed(5),
+            rect.width.toFixed(5),
+            rect.height.toFixed(5)
         ].join(':');
-        if (seen.has(key)) {
-            return false;
+        if (!seen.has(key)) {
+            seen.add(key);
+            uniqueRects.push(rect);
         }
-        seen.add(key);
-        return true;
-    }).slice(0, 80);
+    }
+    return uniqueRects.sort((left, right) => left.y - right.y || left.x - right.x);
+}
+
+function groupRectsIntoLines(rects) {
+    const lines = [];
+    for (const rect of rects) {
+        const line = lines.find((candidate) => rectFitsLine(rect, candidate));
+        if (line) {
+            addRectToLine(line, rect);
+        } else {
+            lines.push(createRectLine(rect));
+        }
+    }
+    return lines.sort((left, right) => left.bounds.y - right.bounds.y || left.bounds.x - right.bounds.x);
+}
+
+function createRectLine(rect) {
+    return {
+        rects: [rect],
+        bounds: { ...rect },
+        center: rect.y + rect.height / 2
+    };
+}
+
+function rectFitsLine(rect, line) {
+    const center = rect.y + rect.height / 2;
+    const tolerance = Math.max(SELECTION_RECT_LINE_TOLERANCE, Math.min(rect.height, line.bounds.height) * 0.55);
+    return Math.abs(center - line.center) <= tolerance || verticalOverlapRatio(rect, line.bounds) >= 0.52;
+}
+
+function addRectToLine(line, rect) {
+    line.rects.push(rect);
+    line.bounds = unionRects(line.bounds, rect);
+    line.center = line.bounds.y + line.bounds.height / 2;
+}
+
+function mergeRectsInLine(rects) {
+    const sortedRects = [...rects].sort((left, right) => left.x - right.x || left.y - right.y);
+    const mergedRects = [];
+    for (const rect of sortedRects) {
+        const previous = mergedRects[mergedRects.length - 1];
+        if (!previous) {
+            mergedRects.push({ ...rect });
+            continue;
+        }
+        const previousRight = previous.x + previous.width;
+        const mergeGap = Math.max(SELECTION_RECT_MERGE_GAP, Math.min(previous.height, rect.height) * 0.12);
+        const sameLine = verticalOverlapRatio(previous, rect) >= 0.35
+            || Math.abs((previous.y + previous.height / 2) - (rect.y + rect.height / 2)) <= SELECTION_RECT_LINE_TOLERANCE;
+        if (sameLine && rect.x <= previousRight + mergeGap) {
+            mergedRects[mergedRects.length - 1] = unionRects(previous, rect);
+        } else {
+            mergedRects.push({ ...rect });
+        }
+    }
+    return mergedRects;
+}
+
+function unionRects(left, right) {
+    const x1 = Math.min(left.x, right.x);
+    const y1 = Math.min(left.y, right.y);
+    const x2 = Math.max(left.x + left.width, right.x + right.width);
+    const y2 = Math.max(left.y + left.height, right.y + right.height);
+    return {
+        x: x1,
+        y: y1,
+        width: x2 - x1,
+        height: y2 - y1
+    };
+}
+
+function verticalOverlapRatio(left, right) {
+    const top = Math.max(left.y, right.y);
+    const bottom = Math.min(left.y + left.height, right.y + right.height);
+    const overlap = bottom - top;
+    if (overlap <= 0) {
+        return 0;
+    }
+    return overlap / Math.min(left.height, right.height);
+}
+
+function roundRect(rect) {
+    return {
+        x: Number(rect.x.toFixed(6)),
+        y: Number(rect.y.toFixed(6)),
+        width: Number(rect.width.toFixed(6)),
+        height: Number(rect.height.toFixed(6))
+    };
+}
+
+function isMeaningfulRect(rect) {
+    return Boolean(rect)
+        && Number.isFinite(rect.x)
+        && Number.isFinite(rect.y)
+        && Number.isFinite(rect.width)
+        && Number.isFinite(rect.height)
+        && rect.width > 0
+        && rect.height > 0
+        && rect.width * rect.height >= ANNOTATION_MIN_RECT_AREA;
 }
 
 function onViewerContextMenu(event) {
@@ -2278,6 +2586,14 @@ function onPagePointerDown(event) {
         return;
     }
     if (event.button !== 0) {
+        return;
+    }
+    if (elements.eraserMode.checked) {
+        event.preventDefault();
+        elements.page.setPointerCapture?.(event.pointerId);
+        state.eraserPointerId = event.pointerId;
+        window.getSelection()?.removeAllRanges();
+        eraseLineAtEvent(event, 'tap');
         return;
     }
     const point = pointToPageRatio(event);
@@ -2311,6 +2627,11 @@ function onPagePointerMove(event) {
         updateVisualSelectionDraft(event);
         return;
     }
+    if (elements.eraserMode.checked && state.eraserPointerId === event.pointerId) {
+        event.preventDefault();
+        eraseLineAtEvent(event, 'drag');
+        return;
+    }
     if (!state.lineDraft || state.lineDraft.pointerId !== event.pointerId) {
         return;
     }
@@ -2327,6 +2648,13 @@ function onPagePointerMove(event) {
 function onPagePointerUp(event) {
     if (state.visualSelectionDraft && state.visualSelectionDraft.pointerId === event.pointerId) {
         finishVisualSelection(event);
+        return;
+    }
+    if (state.eraserPointerId === event.pointerId) {
+        event.preventDefault();
+        eraseLineAtEvent(event, 'release');
+        elements.page.releasePointerCapture?.(event.pointerId);
+        state.eraserPointerId = null;
         return;
     }
     if (!state.lineDraft || state.lineDraft.pointerId !== event.pointerId) {
@@ -2361,6 +2689,9 @@ function cancelLineDraft() {
 function onPageLostPointerCapture(event) {
     if (state.visualSelectionDraft?.pointerId === event.pointerId) {
         finishVisualSelection(event);
+    }
+    if (state.eraserPointerId === event.pointerId) {
+        state.eraserPointerId = null;
     }
 }
 
@@ -2633,29 +2964,78 @@ function lineLength(points) {
     }, 0);
 }
 
-function addHighlightFromSelection() {
-    addAnnotationFromSelection('highlight');
+function eraseLineAtEvent(event, trigger = 'tap') {
+    if (!elements.eraserMode.checked) {
+        return false;
+    }
+    const hit = eraserLineHitFromEvent(event);
+    if (!hit) {
+        return false;
+    }
+    event.stopPropagation();
+    deleteAnnotation(hit.annotation.id, 'annotation.line.erase');
+    flashStatus('已擦除线条');
+    logClient('annotation.line.erase_hit', {
+        page: hit.annotation.page,
+        trigger,
+        distancePx: Number(hit.distancePx.toFixed(1))
+    });
+    return true;
 }
 
-function undoLastHighlight() {
-    const highlights = annotationsForPage(state.currentPage)
-        .filter((annotation) => annotation.type === 'highlight');
-    if (!highlights.length) {
-        flashStatus('本页没有可撤销的高亮');
-        logClient('annotation.highlight.undo_ignored', {
-            page: state.currentPage,
-            reason: 'no-highlight'
-        });
-        return;
+function eraserLineHitFromEvent(event) {
+    const pageNode = pageElementFromEvent(event);
+    if (!pageNode) {
+        return null;
     }
+    const pageNumber = Number(pageNode.dataset.page || state.currentPage);
+    const point = pointToPageRatioInNode(event, pageNode, pageNumber);
+    const pageRect = pageNode.getBoundingClientRect();
+    if (!point || !pageRect.width || !pageRect.height) {
+        return null;
+    }
+    const hits = annotationsForPage(point.page)
+        .filter((annotation) => annotation.type === 'line' && annotation.points?.length >= 2)
+        .map((annotation) => ({
+            annotation,
+            distancePx: distanceFromPointToPolylinePx(point, annotation.points, pageRect)
+        }))
+        .filter((hit) => hit.distancePx <= ERASER_HIT_RADIUS_PX)
+        .sort((left, right) => left.distancePx - right.distancePx);
+    return hits[0] || null;
+}
 
-    const latest = highlights.reduce((current, annotation) => (
-        new Date(annotation.createdAt || 0).getTime() >= new Date(current.createdAt || 0).getTime()
-            ? annotation
-            : current
-    ));
-    deleteAnnotation(latest.id, 'annotation.highlight.undo');
-    flashStatus('已撤销最近一次高亮');
+function distanceFromPointToPolylinePx(point, points, pageRect) {
+    const pxPoint = {
+        x: point.x * pageRect.width,
+        y: point.y * pageRect.height
+    };
+    let distance = Number.POSITIVE_INFINITY;
+    for (let index = 1; index < points.length; index += 1) {
+        const start = points[index - 1];
+        const end = points[index];
+        distance = Math.min(distance, distanceFromPointToSegmentPx(
+            pxPoint,
+            { x: start.x * pageRect.width, y: start.y * pageRect.height },
+            { x: end.x * pageRect.width, y: end.y * pageRect.height }
+        ));
+    }
+    return distance;
+}
+
+function distanceFromPointToSegmentPx(point, start, end) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSquared = dx * dx + dy * dy;
+    if (!lengthSquared) {
+        return Math.hypot(point.x - start.x, point.y - start.y);
+    }
+    const projection = clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared, 0, 1);
+    const closest = {
+        x: start.x + projection * dx,
+        y: start.y + projection * dy
+    };
+    return Math.hypot(point.x - closest.x, point.y - closest.y);
 }
 
 function addNoteFromSelection() {
@@ -2729,7 +3109,7 @@ function addAnnotationFromSelection(type, note = '', preparedSelection = null) {
     if (type === 'note') {
         focusNoteInput(annotation.id);
     }
-    flashStatus(type === 'note' ? '已添加笔记' : '已高亮选区');
+    flashStatus('已添加笔记');
     logClient('annotation.add', {
         type,
         page: annotation.page,
@@ -2844,19 +3224,7 @@ function renderAnnotationsForPage(layer, pageNumber = state.currentPage) {
             renderInlineNote(layer, annotation);
             return;
         }
-        (annotation.rects || []).forEach((rect) => renderHighlightRect(layer, rect, annotation));
     });
-}
-
-function renderHighlightRect(layer, rect, annotation) {
-    const mark = document.createElement('div');
-    mark.className = 'annotation-mark highlight';
-    mark.style.left = `${rect.x * 100}%`;
-    mark.style.top = `${rect.y * 100}%`;
-    mark.style.width = `${rect.width * 100}%`;
-    mark.style.height = `${rect.height * 100}%`;
-    mark.title = annotationTitle(annotation);
-    layer.appendChild(mark);
 }
 
 function renderInlineNote(layer, annotation) {
@@ -2874,7 +3242,7 @@ function renderInlineNote(layer, annotation) {
     noteText.title = annotationTitle(annotation);
     noteText.style.left = `${anchor.x * 100}%`;
     noteText.style.top = `${anchor.y * 100}%`;
-    noteText.style.fontSize = `${noteFontSize(annotation)}px`;
+    noteText.style.fontSize = `${noteRenderFontSize(annotation, layer)}px`;
     layer.appendChild(noteText);
 }
 
@@ -2890,8 +3258,8 @@ function renderNoteBox(layer, annotation) {
     noteBox.style.top = `${box.y * 100}%`;
     noteBox.style.width = `${box.width * 100}%`;
     noteBox.style.height = `${box.height * 100}%`;
-    noteBox.style.fontSize = `${noteFontSize(annotation)}px`;
-    noteBox.title = editing ? '拖动左侧手柄移动，右下角拉伸大小' : '双击编辑笔记';
+    noteBox.style.fontSize = `${noteRenderFontSize(annotation, layer)}px`;
+    noteBox.title = editing ? '拖动左侧手柄移动，右下角拉伸大小' : '点击编辑笔记';
     noteBox.addEventListener('pointerdown', (event) => {
         event.stopPropagation();
         selectAnnotation(annotation.id);
@@ -2901,7 +3269,12 @@ function renderNoteBox(layer, annotation) {
         event.stopPropagation();
         beginNoteEdit(annotation.id);
     });
-    noteBox.addEventListener('pointerup', () => persistNoteBoxGeometry(annotation.id, noteBox));
+    noteBox.addEventListener('pointerup', () => {
+        const nextBox = persistNoteBoxGeometry(annotation.id, noteBox);
+        if (nextBox) {
+            positionRenderedNoteToolbar(annotation.id, nextBox);
+        }
+    });
 
     if (!editing) {
         if (!annotation.note) {
@@ -2910,17 +3283,13 @@ function renderNoteBox(layer, annotation) {
         const display = document.createElement('div');
         display.className = 'annotation-note-display';
         display.textContent = annotation.note;
+        display.title = '点击编辑笔记';
         display.addEventListener('pointerdown', (event) => {
             event.preventDefault();
             event.stopPropagation();
-            beginNoteEdit(annotation.id);
+            selectAnnotation(annotation.id);
         });
         display.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            beginNoteEdit(annotation.id);
-        });
-        display.addEventListener('dblclick', (event) => {
             event.preventDefault();
             event.stopPropagation();
             beginNoteEdit(annotation.id);
@@ -2929,6 +3298,8 @@ function renderNoteBox(layer, annotation) {
         layer.appendChild(noteBox);
         return;
     }
+
+    renderNoteToolbar(layer, annotation);
 
     const handle = document.createElement('div');
     handle.className = 'annotation-note-handle';
@@ -2963,17 +3334,108 @@ function renderNoteBox(layer, annotation) {
     layer.appendChild(noteBox);
 }
 
+function renderNoteToolbar(layer, annotation) {
+    const box = annotation.box;
+    if (!box) {
+        return;
+    }
+    const toolbar = document.createElement('div');
+    toolbar.className = 'annotation-note-toolbar';
+    toolbar.dataset.annotationId = annotation.id;
+    positionNoteToolbar(toolbar, box);
+    toolbar.addEventListener('pointerdown', (event) => {
+        event.stopPropagation();
+        if (!(event.target instanceof HTMLInputElement)) {
+            event.preventDefault();
+        }
+        armNoteEditGuard();
+        selectAnnotation(annotation.id);
+    });
+    toolbar.addEventListener('click', (event) => event.stopPropagation());
+
+    const fontDown = createNoteToolbarButton('A-', '减小字号');
+    wireNoteToolbarButton(fontDown, annotation.id, () => adjustNoteFont(annotation.id, -1, 'toolbar-button'));
+
+    const fontInput = document.createElement('input');
+    fontInput.className = 'note-toolbar-font-input';
+    fontInput.type = 'number';
+    fontInput.min = String(NOTE_MIN_FONT_SIZE);
+    fontInput.max = String(NOTE_MAX_FONT_SIZE);
+    fontInput.step = '1';
+    fontInput.value = String(noteFontSize(annotation));
+    fontInput.setAttribute('aria-label', '笔记字号');
+    fontInput.addEventListener('change', () => applyNoteToolbarFontInput(annotation.id, fontInput));
+    fontInput.addEventListener('keydown', (event) => onNoteToolbarFontKeydown(event, annotation.id, fontInput));
+
+    const fontUp = createNoteToolbarButton('A+', '增大字号');
+    wireNoteToolbarButton(fontUp, annotation.id, () => adjustNoteFont(annotation.id, 1, 'toolbar-button'));
+
+    const deleteButton = createNoteToolbarButton('删', '删除笔记');
+    deleteButton.classList.add('danger');
+    wireNoteToolbarButton(deleteButton, annotation.id, () => {
+        deleteAnnotation(annotation.id, 'annotation.note.delete');
+        flashStatus('已删除笔记');
+    });
+
+    toolbar.appendChild(fontDown);
+    toolbar.appendChild(fontInput);
+    toolbar.appendChild(fontUp);
+    toolbar.appendChild(deleteButton);
+    layer.appendChild(toolbar);
+}
+
+function wireNoteToolbarButton(button, annotationId, action) {
+    button.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        armNoteEditGuard();
+        selectAnnotation(annotationId);
+        action();
+    });
+    button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    });
+}
+
+function positionRenderedNoteToolbar(annotationId, box, root = elements.page) {
+    const toolbar = root.querySelector(`.annotation-note-toolbar[data-annotation-id="${cssEscape(annotationId)}"]`);
+    if (toolbar instanceof HTMLElement) {
+        positionNoteToolbar(toolbar, box);
+    }
+}
+
+function positionNoteToolbar(toolbar, box) {
+    const placeAbove = box.y > 0.075;
+    toolbar.classList.toggle('above', placeAbove);
+    toolbar.classList.toggle('below', !placeAbove);
+    toolbar.style.left = `${box.x * 100}%`;
+    toolbar.style.top = `${(placeAbove ? box.y : box.y + box.height) * 100}%`;
+}
+
+function createNoteToolbarButton(label, title) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    return button;
+}
+
 function createLineSvg(points, className, annotation = null) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.classList.add(...className.split(' '));
     if (annotation) {
         svg.dataset.annotationId = annotation.id;
-        svg.addEventListener('pointerdown', (event) => eraseLineIfActive(event, annotation.id));
     }
     svg.setAttribute('viewBox', '0 0 1 1');
     svg.setAttribute('preserveAspectRatio', 'none');
     const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline.setAttribute('points', points.map((point) => `${point.x},${point.y}`).join(' '));
+    if (annotation) {
+        polyline.dataset.annotationId = annotation.id;
+        polyline.addEventListener('pointerdown', eraseLineIfActive);
+    }
     svg.appendChild(polyline);
     return svg;
 }
@@ -3017,6 +3479,7 @@ function onNoteDragMove(event) {
         node.style.left = `${x * 100}%`;
         node.style.top = `${y * 100}%`;
     }
+    positionRenderedNoteToolbar(annotation.id, { ...annotation.box, x, y }, pageNode);
 }
 
 function onNoteDragEnd(event) {
@@ -3024,7 +3487,10 @@ function onNoteDragEnd(event) {
         const annotationId = state.noteDrag.annotationId;
         const noteBox = elements.page.querySelector(`.annotation-note-box[data-annotation-id="${cssEscape(annotationId)}"]`);
         if (noteBox instanceof HTMLElement) {
-            persistNoteBoxGeometry(annotationId, noteBox);
+            const nextBox = persistNoteBoxGeometry(annotationId, noteBox);
+            if (nextBox) {
+                positionRenderedNoteToolbar(annotationId, nextBox);
+            }
         }
     }
     window.removeEventListener('pointermove', onNoteDragMove);
@@ -3036,7 +3502,7 @@ function persistNoteBoxGeometry(annotationId, noteBox) {
     const annotation = findAnnotation(annotationId);
     const pageRect = annotation ? pageElementForPage(annotation.page)?.getBoundingClientRect() : null;
     if (!annotation?.box || !pageRect?.width || !pageRect?.height) {
-        return;
+        return null;
     }
     const boxRect = noteBox.getBoundingClientRect();
     const nextBox = {
@@ -3048,6 +3514,7 @@ function persistNoteBoxGeometry(annotationId, noteBox) {
     nextBox.x = clamp(nextBox.x, 0, 1 - nextBox.width);
     nextBox.y = clamp(nextBox.y, 0, 1 - nextBox.height);
     updateAnnotation(annotationId, { box: nextBox }, { render: false });
+    return nextBox;
 }
 
 function beginNoteEdit(annotationId) {
@@ -3067,17 +3534,23 @@ function handleNoteInputBlur(annotationId, input, noteBox) {
     if (state.editingNoteId !== annotationId) {
         return;
     }
-    const waitMs = state.noteEditGuardUntil - performance.now();
-    if (waitMs > 0) {
-        window.setTimeout(() => {
-            if (state.editingNoteId === annotationId && noteBox.isConnected && document.activeElement !== input) {
-                input.focus();
-                placeCaretAtEnd(input);
-            }
-        }, waitMs + 20);
-        return;
-    }
-    finishNoteEdit(annotationId, input, noteBox);
+    const waitMs = Math.max(0, state.noteEditGuardUntil - performance.now());
+    window.setTimeout(() => {
+        if (state.editingNoteId !== annotationId || !noteBox.isConnected) {
+            return;
+        }
+        const activeNode = document.activeElement;
+        const toolbar = elements.page.querySelector(`.annotation-note-toolbar[data-annotation-id="${cssEscape(annotationId)}"]`);
+        if (activeNode instanceof Node && (noteBox.contains(activeNode) || toolbar?.contains(activeNode))) {
+            return;
+        }
+        if (waitMs > 0) {
+            input.focus();
+            placeCaretAtEnd(input);
+            return;
+        }
+        finishNoteEdit(annotationId, input, noteBox);
+    }, waitMs + 20);
 }
 
 function finishActiveNoteEdit() {
@@ -3115,14 +3588,6 @@ function finishNoteEdit(annotationId, input, noteBox) {
         page: state.currentPage,
         textLength: input.value.length
     });
-}
-
-function deleteSelectedNote() {
-    const annotation = findAnnotation(state.selectedAnnotationId);
-    if (!annotation || annotation.type !== 'note') {
-        return;
-    }
-    deleteAnnotation(annotation.id, 'annotation.note.delete');
 }
 
 function selectAnnotation(annotationId, options = {}) {
@@ -3165,48 +3630,51 @@ function applySelectedAnnotationClass(annotationId) {
     });
 }
 
-function adjustSelectedNoteFont(delta) {
-    const annotation = findAnnotation(state.selectedAnnotationId);
+function adjustNoteFont(annotationId, delta, trigger = 'toolbar-button') {
+    const annotation = findAnnotation(annotationId);
     if (!annotation || annotation.type !== 'note') {
         return;
     }
-    setSelectedNoteFont(annotation, noteFontSize(annotation) + delta, 'button');
+    setNoteFont(annotation, noteFontSize(annotation) + delta, trigger);
 }
 
-function applyTypedNoteFont() {
-    const annotation = findAnnotation(state.selectedAnnotationId);
+function applyNoteToolbarFontInput(annotationId, input) {
+    const annotation = findAnnotation(annotationId);
     if (!annotation || annotation.type !== 'note') {
         return;
     }
-    const parsed = Number(elements.noteFontInput.value);
+    const parsed = Number(input.value);
     if (!Number.isFinite(parsed)) {
-        elements.noteFontInput.value = String(noteFontSize(annotation));
+        input.value = String(noteFontSize(annotation));
         flashStatus('请输入字号');
         return;
     }
-    setSelectedNoteFont(annotation, parsed, 'input');
+    setNoteFont(annotation, parsed, 'toolbar-input');
 }
 
-function onNoteFontInputKeydown(event) {
+function onNoteToolbarFontKeydown(event, annotationId, input) {
     if (event.key === 'Enter') {
         event.preventDefault();
-        applyTypedNoteFont();
-        elements.noteFontInput.blur();
+        applyNoteToolbarFontInput(annotationId, input);
+        input.blur();
         return;
     }
     if (event.key === 'Escape') {
         event.preventDefault();
-        const annotation = findAnnotation(state.selectedAnnotationId);
-        elements.noteFontInput.value = annotation?.type === 'note'
+        const annotation = findAnnotation(annotationId);
+        input.value = annotation?.type === 'note'
             ? String(noteFontSize(annotation))
             : String(NOTE_DEFAULT_FONT_SIZE);
-        elements.noteFontInput.blur();
+        input.blur();
     }
 }
 
-function setSelectedNoteFont(annotation, rawSize, trigger) {
+function setNoteFont(annotation, rawSize, trigger) {
     const nextSize = clamp(Math.round(Number(rawSize) || NOTE_DEFAULT_FONT_SIZE), NOTE_MIN_FONT_SIZE, NOTE_MAX_FONT_SIZE);
     updateAnnotation(annotation.id, { fontSize: nextSize, fontSizeRatio: null });
+    if (state.editingNoteId === annotation.id) {
+        focusNoteInput(annotation.id);
+    }
     logClient('annotation.note.font', {
         page: annotation.page,
         fontSize: nextSize,
@@ -3224,6 +3692,25 @@ function noteFontSize(annotation) {
         return clamp(Math.round(legacyRatio * 1000), NOTE_MIN_FONT_SIZE, NOTE_MAX_FONT_SIZE);
     }
     return NOTE_DEFAULT_FONT_SIZE;
+}
+
+function noteRenderFontSize(annotation, layer) {
+    const renderScale = pageRenderScaleForLayer(layer);
+    return clamp(
+        noteFontSize(annotation) * (renderScale / DEFAULT_SCALE),
+        NOTE_RENDER_MIN_FONT_SIZE,
+        NOTE_RENDER_MAX_FONT_SIZE
+    );
+}
+
+function pageRenderScaleForLayer(layer) {
+    const pageNode = layer instanceof Element ? layer.closest('.page-wrap') : null;
+    const renderScale = Number(pageNode?.dataset.renderScale);
+    if (Number.isFinite(renderScale) && renderScale > 0) {
+        return renderScale;
+    }
+    const fallback = Number(state.renderedScale) || Number(state.scale);
+    return Number.isFinite(fallback) && fallback > 0 ? fallback : DEFAULT_SCALE;
 }
 
 function updateAnnotation(annotationId, patch, options = {}) {
@@ -3273,13 +3760,12 @@ function findAnnotationEntry(annotationId) {
     return null;
 }
 
-function eraseLineIfActive(event, annotationId) {
+function eraseLineIfActive(event) {
     if (!elements.eraserMode.checked) {
         return;
     }
     event.preventDefault();
-    event.stopPropagation();
-    deleteAnnotation(annotationId, 'annotation.line.erase');
+    eraseLineAtEvent(event, 'stroke');
 }
 
 function deleteAnnotation(annotationId, eventName = 'annotation.delete') {
@@ -3468,12 +3954,16 @@ async function explainCurrentPage() {
     const source = `${state.fileName || 'PDF'} p.${pageNumber} 全页`;
     logClient('page.explain.start', { page: pageNumber });
     try {
-        const image = await capturePageImage(pageNumber, { kind: 'page', namePrefix: 'page-explain' });
-        await explainText('请根据图片和页面上下文，结构化讲解当前整页内容。', {
-            mode: 'ask',
+        const [image, pageText, pageContext] = await Promise.all([
+            capturePageImage(pageNumber, { kind: 'page', namePrefix: 'page-explain' }),
+            getPageText(pageNumber),
+            buildPageContext(pageNumber)
+        ]);
+        await explainText(pageText || '当前页截图中的课程内容', {
+            mode: 'explain',
             source,
-            pageContext: await buildPageContext(pageNumber),
-            selectionContext: await getPageText(pageNumber),
+            pageContext,
+            selectionContext: pageText,
             history: state.explainHistory,
             userVisibleText: `讲解本页：${source}`,
             images: [image]
@@ -3523,22 +4013,24 @@ async function explainVisualSelectionFromAction(event) {
     setPaneCollapsed('assistant', false);
     clearVisualSelection('visual-explain');
     try {
-        const [image, pageContext] = await Promise.all([
+        const [image, pageContext, pageText] = await Promise.all([
             capturePageImage(pageNumber, {
                 rect: selection.kind === 'region' ? selection.rect : null,
                 kind: selection.kind,
                 namePrefix: 'visual-explain'
             }),
-            buildPageContext(pageNumber)
+            buildPageContext(pageNumber),
+            getPageText(pageNumber)
         ]);
         const label = selection.kind === 'region' ? '右键圈选区域' : '当前页';
         const source = `${state.fileName || 'PDF'} p.${pageNumber} ${label}`;
+        const text = selection.kind === 'region' ? `${label}截图中的课程内容` : pageText;
         logClient('visual.selection.explain', { page: pageNumber, kind: selection.kind });
-        await explainText(`请识别并讲解${label}中的内容。`, {
-            mode: 'ask',
+        await explainText(text || `${label}截图中的课程内容`, {
+            mode: 'explain',
             source,
             pageContext,
-            selectionContext: await getPageText(pageNumber),
+            selectionContext: pageText,
             history: state.explainHistory,
             userVisibleText: `讲解${label}：${source}`,
             images: [image]
@@ -3605,11 +4097,12 @@ async function explainText(text, options = {}) {
     const selectionContext = options.selectionContext || '';
     const images = options.images || [];
     const userVisibleText = options.userVisibleText || question || text;
-    appendMessage('user', userVisibleText, source, { scroll: false, images });
+    clearPendingAssistantViewportFill();
+    const userNode = appendMessage('user', userVisibleText, source, { scroll: false, images });
     const assistantNode = appendMessage('assistant', '', 'AI', { scroll: false });
     const assistantBody = assistantNode.querySelector('.body');
     state.activeAssistantNode = assistantBody;
-    scrollMessageToStart(assistantNode);
+    preparePendingAssistantViewport(userNode, assistantNode);
     setBusy(true, '生成中');
     logClient('explain.fetch.start', {
         source,
@@ -3655,7 +4148,7 @@ async function explainText(text, options = {}) {
         } else {
             assistantText += `\n\n请求失败：${messageOf(error)}`;
             updateMarkdownNode(assistantBody, assistantText);
-            scrollMessageToStart(assistantNode);
+            scrollMessageToStart(assistantNode, 'conversation.scroll.answer_start');
             logClient('explain.fetch.error', { message: messageOf(error) });
         }
     } finally {
@@ -3804,6 +4297,7 @@ function renderImageAttachments() {
         remove.type = 'button';
         remove.dataset.imageId = image.id;
         remove.setAttribute('aria-label', `移除图片 ${image.name}`);
+        remove.title = `移除图片 ${image.name}`;
         remove.textContent = '×';
 
         item.append(preview, remove);
@@ -4048,30 +4542,28 @@ function updateToolbar() {
 
 function updateAnnotationControls() {
     const hasPdf = Boolean(state.pdfDoc);
-    const hasSelection = Boolean(
-        state.pendingAnnotationSelection
-        && state.pendingAnnotationSelection.page === state.currentPage
-        && state.pendingAnnotationSelection.rects.length
-    );
     const pageAnnotations = annotationsForPage(state.currentPage);
     const hasPageAnnotations = pageAnnotations.length > 0;
-    const hasHighlights = pageAnnotations.some((annotation) => annotation.type === 'highlight');
-    const selectedNote = findAnnotation(state.selectedAnnotationId);
-    elements.addHighlight.disabled = !hasPdf || !hasSelection;
-    elements.undoHighlight.disabled = !hasPdf || !hasHighlights;
     elements.addNote.disabled = !hasPdf;
     elements.addNote.classList.toggle('active-tool', hasPdf && state.notePlacementMode);
     elements.addNote.setAttribute('aria-pressed', String(hasPdf && state.notePlacementMode));
     elements.addNote.textContent = hasPdf && state.notePlacementMode ? '退出笔记' : '笔记';
+    elements.addNote.title = hasPdf && state.notePlacementMode
+        ? '退出笔记放置模式'
+        : '选中文本后添加笔记，或开启后在 PDF 上点击放置笔记';
     elements.lineMode.disabled = !hasPdf;
     elements.eraserMode.disabled = !hasPdf;
-    elements.noteFontDown.disabled = !selectedNote || selectedNote.type !== 'note';
-    elements.noteFontUp.disabled = !selectedNote || selectedNote.type !== 'note';
-    elements.noteFontInput.disabled = !selectedNote || selectedNote.type !== 'note';
-    elements.noteFontInput.value = selectedNote?.type === 'note'
-        ? String(noteFontSize(selectedNote))
-        : String(NOTE_DEFAULT_FONT_SIZE);
-    elements.deleteNote.disabled = !selectedNote || selectedNote.type !== 'note';
+    elements.lineMode.classList.toggle('active-tool', hasPdf && elements.lineMode.checked);
+    elements.eraserMode.classList.toggle('active-tool', hasPdf && elements.eraserMode.checked);
+    elements.lineMode.setAttribute('aria-pressed', String(hasPdf && elements.lineMode.checked));
+    elements.eraserMode.setAttribute('aria-pressed', String(hasPdf && elements.eraserMode.checked));
+    elements.lineMode.textContent = '绘制';
+    elements.lineMode.title = elements.lineMode.checked
+        ? '退出绘制模式'
+        : '开启后可在 PDF 上手绘线条';
+    elements.eraserMode.title = elements.eraserMode.checked
+        ? '退出橡皮模式'
+        : '开启后点击手绘线条可擦除';
     elements.clearPageAnnotations.disabled = !hasPdf || !hasPageAnnotations;
     elements.page.classList.toggle('line-drawing-active', hasPdf && elements.lineMode.checked);
     elements.page.classList.toggle('note-placement-active', hasPdf && state.notePlacementMode);
@@ -4111,13 +4603,23 @@ function availableViewerWidth() {
     );
 }
 
-async function buildPageContext(pageNumber) {
+async function buildSelectionPageContext(pageNumber) {
+    return buildPageContext(pageNumber, {
+        radius: SELECTION_CONTEXT_RADIUS,
+        maxChars: SELECTION_CONTEXT_MAX_CHARS,
+        kind: 'selection'
+    });
+}
+
+async function buildPageContext(pageNumber, options = {}) {
     if (!state.pdfDoc) {
         return '';
     }
 
-    const from = Math.max(1, pageNumber - PDF_CONTEXT_RADIUS);
-    const to = Math.min(state.pdfDoc.numPages, pageNumber + PDF_CONTEXT_RADIUS);
+    const radius = Number.isFinite(options.radius) ? Math.max(0, Number(options.radius)) : PDF_CONTEXT_RADIUS;
+    const maxChars = Number.isFinite(options.maxChars) ? Math.max(400, Number(options.maxChars)) : PAGE_CONTEXT_MAX_CHARS;
+    const from = Math.max(1, pageNumber - radius);
+    const to = Math.min(state.pdfDoc.numPages, pageNumber + radius);
     const chunks = [];
     for (let page = from; page <= to; page += 1) {
         const text = await getPageText(page);
@@ -4127,13 +4629,14 @@ async function buildPageContext(pageNumber) {
     }
 
     const context = chunks.join('\n\n');
-    const trimmed = context.length > PAGE_CONTEXT_MAX_CHARS
-        ? `${context.slice(0, PAGE_CONTEXT_MAX_CHARS)}\n...[context truncated]`
+    const trimmed = context.length > maxChars
+        ? `${context.slice(0, maxChars)}\n...[context truncated]`
         : context;
     logClient('pdf.context.built', {
         page: pageNumber,
         from,
         to,
+        kind: options.kind || 'full',
         contextLength: trimmed.length
     });
     return trimmed;
@@ -4169,13 +4672,31 @@ function scrollMessagesToEnd() {
     });
 }
 
-function scrollMessageToStart(node) {
+function clearPendingAssistantViewportFill() {
+    for (const node of elements.messages.querySelectorAll('.message.assistant[data-pending-viewport-fill="true"]')) {
+        node.style.minHeight = '';
+        delete node.dataset.pendingViewportFill;
+    }
+}
+
+function preparePendingAssistantViewport(userNode, assistantNode) {
+    requestAnimationFrame(() => {
+        const containerRect = elements.messages.getBoundingClientRect();
+        const userRect = userNode.getBoundingClientRect();
+        const waitingHeight = Math.max(96, Math.ceil(containerRect.height - userRect.height - 24));
+        assistantNode.style.minHeight = `${waitingHeight}px`;
+        assistantNode.dataset.pendingViewportFill = 'true';
+        scrollMessageToStart(userNode, 'conversation.scroll.user_start');
+    });
+}
+
+function scrollMessageToStart(node, eventName = 'conversation.scroll.message_start') {
     requestAnimationFrame(() => {
         const containerRect = elements.messages.getBoundingClientRect();
         const nodeRect = node.getBoundingClientRect();
         const top = Math.max(0, elements.messages.scrollTop + nodeRect.top - containerRect.top - 8);
         elements.messages.scrollTop = top;
-        logClient('conversation.scroll.answer_start', { scrollTop: Math.round(top) });
+        logClient(eventName, { scrollTop: Math.round(top) });
     });
 }
 
@@ -4401,6 +4922,7 @@ function loadUiPrefs() {
         return {
             autoTranslate: hasCurrentAutoTriggerPrefs && typeof parsed.autoTranslate === 'boolean' ? parsed.autoTranslate : false,
             autoExplain: hasCurrentAutoTriggerPrefs && typeof parsed.autoExplain === 'boolean' ? parsed.autoExplain : false,
+            theme: parsed.theme === THEME_DARK ? THEME_DARK : THEME_LIGHT,
             lineMode: false,
             eraserMode: false,
             visualSelectionStyle: parsed.visualSelectionStyle === VISUAL_SELECTION_STYLE_BOX
@@ -4431,6 +4953,7 @@ function loadUiPrefs() {
         return {
             autoTranslate: false,
             autoExplain: false,
+            theme: THEME_LIGHT,
             lineMode: false,
             eraserMode: false,
             visualSelectionStyle: VISUAL_SELECTION_STYLE_PATH,
@@ -4445,6 +4968,8 @@ function loadUiPrefs() {
 }
 
 function applyUiPrefs() {
+    applyDocumentTheme(state.uiPrefs.theme);
+    elements.darkMode.checked = state.uiPrefs.theme === THEME_DARK;
     elements.autoTranslate.checked = state.uiPrefs.autoTranslate === true;
     elements.autoExplain.checked = state.uiPrefs.autoExplain === true;
     elements.lineMode.checked = state.uiPrefs.lineMode === true;
@@ -4492,6 +5017,7 @@ function saveUiPrefs() {
     state.uiPrefs = {
         autoTranslate: elements.autoTranslate.checked,
         autoExplain: elements.autoExplain.checked,
+        theme: elements.darkMode.checked ? THEME_DARK : THEME_LIGHT,
         lineMode: elements.lineMode.checked,
         eraserMode: elements.eraserMode.checked,
         visualSelectionStyle: visualSelectionStyle(),
@@ -4506,6 +5032,10 @@ function saveUiPrefs() {
         assistantPaneCollapsed: state.uiPrefs.assistantPaneCollapsed === true
     };
     localStorage.setItem(UI_PREFS_KEY, JSON.stringify(state.uiPrefs));
+}
+
+function applyDocumentTheme(theme) {
+    document.documentElement.dataset.theme = theme === THEME_DARK ? THEME_DARK : THEME_LIGHT;
 }
 
 function visualSelectionStyle() {

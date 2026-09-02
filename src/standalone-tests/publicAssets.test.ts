@@ -25,7 +25,33 @@ test('front-end script remains syntactically valid JavaScript', () => {
 
 test('front-end stylesheet keeps rule braces balanced', () => {
     assert.equal(stylesCss.match(/\{/g)?.length || 0, stylesCss.match(/\}/g)?.length || 0);
-    assert.match(stylesCss, /\.annotation-ribbon \.inline-check \{[\s\S]*?background: var\(--surface-3\);\s*\}\s*\.annotation-ribbon \.page-info/);
+    const annotationInlineCheckCss = stylesCss.match(/\.annotation-ribbon \.inline-check \{[\s\S]*?\}/)?.[0] || '';
+    assert.ok(annotationInlineCheckCss.includes('background: transparent;'));
+    assert.equal(annotationInlineCheckCss.includes('background: var(--surface-3);'), false);
+});
+
+test('front-end keeps dark mode checkboxes visible', () => {
+    const inlineCheckboxCss = stylesCss.match(/\.inline-check input\[type="checkbox"\] \{[\s\S]*?\}/)?.[0] || '';
+    const darkCheckboxCss = stylesCss.match(/:root\[data-theme="dark"\] \.inline-check input\[type="checkbox"\] \{[\s\S]*?\}/)?.[0] || '';
+    const darkCheckedCss = stylesCss.match(/:root\[data-theme="dark"\] \.inline-check input\[type="checkbox"\]:checked \{[\s\S]*?\}/)?.[0] || '';
+
+    assert.ok(inlineCheckboxCss.includes('appearance: none;'));
+    assert.ok(darkCheckboxCss.includes('border-color: #858585;'));
+    assert.ok(darkCheckboxCss.includes('background-color: #252526;'));
+    assert.ok(darkCheckedCss.includes('background-color: #3c3c3c;'));
+    assert.ok(darkCheckedCss.includes('%23f3f3f3'));
+});
+
+test('front-end keeps dark PDF selections visible on white pages', () => {
+    const darkTextSelectionCss = stylesCss.match(/:root\[data-theme="dark"\] \.textLayer ::selection \{[\s\S]*?\}/)?.[0] || '';
+    const darkVisualBoxCss = stylesCss.match(/:root\[data-theme="dark"\] \.visual-selection-box \{[\s\S]*?\}/)?.[0] || '';
+    const darkVisualPathCss = stylesCss.match(/:root\[data-theme="dark"\] \.visual-selection-path \{[\s\S]*?\}/)?.[0] || '';
+
+    assert.ok(darkTextSelectionCss.includes('background: rgba(96, 94, 92, 0.3);'));
+    assert.equal(darkTextSelectionCss.includes('rgba(255, 255, 255'), false);
+    assert.ok(darkVisualBoxCss.includes('fill: rgba(96, 94, 92, 0.18);'));
+    assert.ok(darkVisualBoxCss.includes('stroke: rgba(60, 60, 60, 0.92);'));
+    assert.ok(darkVisualPathCss.includes('stroke: rgba(60, 60, 60, 0.95);'));
 });
 
 test('front-end auto explain only probes selection after mouse release', () => {
@@ -102,12 +128,33 @@ test('front-end exposes OpenAI and DeepSeek provider presets', () => {
     assert.ok(appJs.includes('preset: elements.providerKind.value'));
 });
 
-test('front-end builds hidden PDF context and anchors new assistant replies at their start', () => {
-    assert.ok(appJs.includes('buildPageContext(selectionSnapshot.page)'));
+test('front-end exposes DeepSeek thinking toggles for translate and explain', () => {
+    assert.ok(indexHtml.includes('id="deepSeekThinkingTranslate"'));
+    assert.ok(indexHtml.includes('id="deepSeekThinkingExplain"'));
+    assert.ok(indexHtml.includes('DeepSeek 翻译思考'));
+    assert.ok(indexHtml.includes('DeepSeek 讲解思考'));
+    assert.ok(appJs.includes('deepSeekThinkingTranslate: document.getElementById'));
+    assert.ok(appJs.includes('deepSeekThinkingExplain: document.getElementById'));
+    assert.ok(appJs.includes('deepSeekThinkingTranslate: elements.deepSeekThinkingTranslate.checked'));
+    assert.ok(appJs.includes('deepSeekThinkingExplain: elements.deepSeekThinkingExplain.checked'));
+    assert.ok(appJs.includes('elements.deepSeekThinkingTranslate.checked = Boolean(settings.provider.deepSeekThinkingTranslate)'));
+    assert.ok(appJs.includes('elements.deepSeekThinkingExplain.checked = Boolean(settings.provider.deepSeekThinkingExplain)'));
+    assert.ok(appJs.includes("const isDeepSeek = preset === 'deepseek'"));
+    assert.ok(appJs.includes('elements.deepSeekThinkingTranslate.disabled = !isDeepSeek'));
+    assert.ok(appJs.includes('elements.deepSeekThinkingExplain.disabled = !isDeepSeek'));
+});
+
+test('front-end builds hidden PDF context and anchors new assistant turns at the user question', () => {
+    assert.ok(appJs.includes('buildSelectionPageContext(selectionSnapshot.page)'));
+    assert.ok(appJs.includes('buildSelectionPageContext(selection.page)'));
     assert.ok(appJs.includes('buildPageContext(state.currentPage)'));
     assert.ok(appJs.includes('pageContextLength: pageContext.length'));
     assert.ok(appJs.includes('body: JSON.stringify({ mode, text, source, question, pageContext, selectionContext, history, images })'));
-    assert.ok(appJs.includes('scrollMessageToStart(assistantNode)'));
+    assert.ok(appJs.includes('const userNode = appendMessage(\'user\', userVisibleText, source, { scroll: false, images });'));
+    assert.ok(appJs.includes('preparePendingAssistantViewport(userNode, assistantNode)'));
+    assert.ok(appJs.includes('clearPendingAssistantViewportFill()'));
+    assert.ok(appJs.includes("scrollMessageToStart(userNode, 'conversation.scroll.user_start')"));
+    assert.ok(appJs.includes("scrollMessageToStart(assistantNode, 'conversation.scroll.answer_start')"));
     assert.equal(appJs.includes('scrollMessagesToLatest()'), false);
 });
 
@@ -143,6 +190,7 @@ test('front-end supports wheel and keyboard page navigation', () => {
 test('front-end supports visible PDF reader scrollbars and direct page jumping', () => {
     const toolbarHtml = indexHtml.slice(indexHtml.indexOf('<section class="file-toolbar">'), indexHtml.indexOf('<main id="appShell"'));
     const readerPaneHtml = indexHtml.slice(indexHtml.indexOf('<section class="reader-pane">'));
+    const pageSliderCss = stylesCss.match(/\.page-slider \{[\s\S]*?\}/)?.[0] || '';
 
     assert.ok(indexHtml.includes('id="pageJumpInput"'));
     assert.equal(indexHtml.includes('id="pageJumpButton"'), false);
@@ -164,6 +212,11 @@ test('front-end supports visible PDF reader scrollbars and direct page jumping',
     assert.ok(stylesCss.includes('scrollbar-gutter: stable both-edges'));
     assert.ok(stylesCss.includes('.reader-footer'));
     assert.ok(stylesCss.includes('.page-slider'));
+    assert.ok(pageSliderCss.includes('accent-color: #9aa1aa;'));
+    assert.ok(pageSliderCss.includes('appearance: none;'));
+    assert.ok(stylesCss.includes('.page-slider::-webkit-slider-runnable-track'));
+    assert.ok(stylesCss.includes('background: #eef1f4;'));
+    assert.equal(pageSliderCss.includes('accent-color: var(--accent);'), false);
 });
 
 test('front-end uses a minimal reading file panel for imports and document list', () => {
@@ -249,8 +302,8 @@ test('front-end keeps zoom lightweight through Ctrl wheel', () => {
     assert.ok(appJs.includes("logClient('pdf.zoom.preview'"));
     assert.ok(appJs.includes("logClient('pdf.zoom.commit'"));
     assert.ok(appJs.includes("logClient('pdf.zoom.change'"));
-    assert.equal(appJs.includes('pageNode.style.width = `${baseWidth * previewRatio}px`;'), false);
-    assert.equal(appJs.includes('pageNode.style.height = `${baseHeight * previewRatio}px`;'), false);
+    assert.ok(appJs.includes('pageNode.style.width = `${baseWidth * previewRatio}px`;'));
+    assert.ok(appJs.includes('pageNode.style.height = `${baseHeight * previewRatio}px`;'));
     assert.ok(stylesCss.includes('.page-content'));
     assert.ok(stylesCss.includes('.viewer.smooth-zooming'));
     assert.equal(indexHtml.includes('id="zoomOut"'), false);
@@ -291,8 +344,16 @@ test('front-end exposes local PDF annotation tools', () => {
     assert.equal(annotationRibbonHtml.includes('id="editMode"'), false);
     assert.equal(annotationRibbonHtml.includes('<span>批注</span>'), false);
     assert.equal(annotationRibbonHtml.includes('hidden'), false);
-    assert.ok(annotationRibbonHtml.includes('id="addHighlight"'));
+    assert.equal(annotationRibbonHtml.includes('id="addHighlight"'), false);
+    assert.equal(indexHtml.includes('id="selectionAddHighlight"'), false);
+    assert.equal(indexHtml.includes('id="selectionRemoveHighlight"'), false);
+    assert.equal(indexHtml.includes('id="markerMode"'), false);
     assert.ok(annotationRibbonHtml.includes('id="clearPageAnnotations"'));
+    assert.ok(annotationRibbonHtml.includes('id="lineMode"'));
+    assert.ok(annotationRibbonHtml.includes('>绘制</button>'));
+    assert.ok(annotationRibbonHtml.includes('id="eraserMode"'));
+    assert.equal(annotationRibbonHtml.includes('type="checkbox"'), false);
+    assert.equal(annotationRibbonHtml.includes('<span>线条</span>'), false);
     assert.equal(indexHtml.includes('annotation-popover'), false);
     assert.equal(indexHtml.includes('toolbar-menu'), false);
     assert.equal(appJs.includes("elements.annotationToggle.addEventListener('click', toggleAnnotationRibbon)"), false);
@@ -301,15 +362,29 @@ test('front-end exposes local PDF annotation tools', () => {
     assert.ok(annotationRibbonCss.includes('display: flex'));
     assert.ok(annotationRibbonCss.includes('border-bottom: 1px solid var(--line)'));
     assert.ok(annotationRibbonCss.includes('overflow-x: auto'));
-    assert.ok(appJs.includes('addHighlightFromSelection'));
-    assert.ok(indexHtml.includes('id="undoHighlight"'));
-    assert.ok(appJs.includes('undoLastHighlight'));
-    assert.ok(appJs.includes("annotation.highlight.undo"));
+    assert.equal(appJs.includes('toggleHighlightFromSelection'), false);
+    assert.equal(appJs.includes('selectionFullyHighlighted'), false);
+    assert.equal(appJs.includes('selectionIntersectsHighlights'), false);
+    assert.ok(appJs.includes('selectedTextNodeRectsForPage'));
+    assert.equal(appJs.includes('highlightRenderRects'), false);
+    assert.equal(appJs.includes('renderHighlightAnnotations'), false);
+    assert.equal(appJs.includes('addHighlightAnnotation'), false);
+    assert.equal(appJs.includes('annotation-marker'), false);
+    assert.equal(indexHtml.includes('id="undoHighlight"'), false);
+    assert.equal(appJs.includes('undoLastHighlight'), false);
+    assert.equal(appJs.includes("annotation.highlight.undo"), false);
+    assert.equal(appJs.includes("annotation.highlight.add_selection"), false);
+    assert.equal(appJs.includes("annotation.highlight.remove_selection"), false);
+    assert.equal(appJs.includes("annotation.highlight.toggle_add"), false);
+    assert.equal(appJs.includes("annotation.highlight.toggle_remove"), false);
     assert.ok(appJs.includes('addNoteFromSelection'));
     assert.ok(appJs.includes('renderAnnotationsForPage'));
     assert.ok(appJs.includes('localStorage.setItem(ANNOTATION_STORE_KEY'));
     assert.ok(appJs.includes('queueReadingFileNotesSave(state.activeReadingFileId, notes)'));
     assert.ok(appJs.includes("fetch(`/api/reading-files/${encodeURIComponent(pending.id)}/notes`"));
+    assert.ok(stylesCss.includes('line-height: 0.92;'));
+    assert.equal(stylesCss.includes('--highlight'), false);
+    assert.equal(stylesCss.includes('.annotation-mark.highlight'), false);
 });
 
 test('front-end supports manual text translation without PDF selection', () => {
@@ -346,15 +421,42 @@ test('front-end supports manual text translation without PDF selection', () => {
     assert.ok(appJs.includes("logClient('translate.manual.submit'"));
 });
 
+test('front-end renders translation and AI answers as plain text flow', () => {
+    const translationResultCss = stylesCss.match(/\.translation-result \{[\s\S]*?\}/)?.[0] || '';
+    const messageCss = stylesCss.match(/\.message \{[\s\S]*?\}/)?.[0] || '';
+    const userMessageCss = stylesCss.match(/\.message\.user \{[\s\S]*?\}/)?.[0] || '';
+    const assistantMessageCss = stylesCss.match(/\.message\.assistant \{[\s\S]*?\}/)?.[0] || '';
+
+    assert.ok(translationResultCss.includes('background: transparent;'));
+    assert.ok(translationResultCss.includes('border: 0;'));
+    assert.ok(translationResultCss.includes('box-shadow: none;'));
+    assert.ok(messageCss.includes('background: transparent;'));
+    assert.ok(messageCss.includes('border: 0;'));
+    assert.ok(messageCss.includes('box-shadow: none;'));
+    assert.ok(userMessageCss.includes('background: #f6f7f9;'));
+    assert.ok(userMessageCss.includes('border: 1px solid #dde2e8;'));
+    assert.ok(userMessageCss.includes('border-radius: 8px;'));
+    assert.ok(assistantMessageCss.includes('background: transparent;'));
+    assert.equal(userMessageCss.includes('border-left: 4px solid var(--accent);'), false);
+    assert.equal(assistantMessageCss.includes('border-left: 4px solid var(--accent-2);'), false);
+});
+
 test('front-end shows only manual selection actions whose auto trigger is off', () => {
     assert.ok(indexHtml.includes('id="selectionActions"'));
     assert.ok(indexHtml.includes('id="selectionExplain"'));
     assert.ok(indexHtml.includes('id="selectionTranslate"'));
+    assert.equal(indexHtml.includes('id="selectionAddHighlight"'), false);
+    assert.equal(indexHtml.includes('id="selectionRemoveHighlight"'), false);
     assert.ok(appJs.includes('selectionActionsSnapshot'));
-    assert.ok(appJs.includes('const canExplain = Boolean(selectionSnapshot?.text) && !elements.autoExplain.checked'));
-    assert.ok(appJs.includes('const canTranslate = Boolean(selectionSnapshot?.text) && !elements.autoTranslate.checked'));
+    assert.ok(appJs.includes('const canExplain = hasTextSelection && !elements.autoExplain.checked'));
+    assert.ok(appJs.includes('const canTranslate = hasTextSelection && !elements.autoTranslate.checked'));
+    assert.equal(appJs.includes('const canAddHighlight = hasTextSelection && !hasHighlightedSelection'), false);
+    assert.equal(appJs.includes('const canRemoveHighlight = hasTextSelection && overlapsHighlightedSelection'), false);
     assert.ok(appJs.includes('elements.selectionExplain.hidden = !canExplain'));
     assert.ok(appJs.includes('elements.selectionTranslate.hidden = !canTranslate'));
+    assert.equal(appJs.includes('elements.selectionAddHighlight.hidden = !hasTextSelection'), false);
+    assert.equal(appJs.includes('elements.selectionRemoveHighlight.hidden = !hasTextSelection'), false);
+    assert.ok(appJs.includes('selectionContainsPdfText'));
     assert.ok(appJs.includes('if (!autoTranslateEnabled && !autoExplainEnabled)'));
     assert.equal(appJs.includes("hideSelectionActions('edit-mode')"), false);
     assert.ok(appJs.includes("document.addEventListener('mouseup', (event) => queueTextSelectionProbe('mouseup', actionAnchorFromEvent(event)), true)"));
@@ -412,35 +514,47 @@ test('front-end supports resizable and collapsible side panes', () => {
 test('front-end renders editable note boxes and erasable freehand lines', () => {
     assert.ok(appJs.includes('annotation-note-text'));
     assert.ok(appJs.includes('annotation-note-box'));
+    assert.ok(appJs.includes('annotation-note-toolbar'));
     assert.ok(appJs.includes('annotation-note-input'));
     assert.ok(appJs.includes("document.createElement('textarea')"));
     assert.ok(appJs.includes('finishNoteEdit'));
-    assert.ok(appJs.includes('deleteSelectedNote'));
+    assert.equal(appJs.includes('deleteSelectedNote'), false);
     assert.ok(appJs.includes('annotation.note.delete'));
     assert.ok(appJs.includes('annotation.note.empty_delete'));
     assert.ok(appJs.includes('notePlacementMode'));
     assert.ok(stylesCss.includes('--note-content-padding'));
     assert.ok(stylesCss.includes('padding: var(--note-content-padding);'));
-    assert.ok(stylesCss.includes('--note-handle-width: 10px'));
+    assert.ok(stylesCss.includes('--pdf-zoom-ratio'));
+    assert.ok(stylesCss.includes('--note-handle-width: calc(10px * var(--pdf-zoom-ratio))'));
+    assert.ok(stylesCss.includes('.annotation-note-toolbar'));
+    assert.ok(stylesCss.includes('.note-toolbar-font-input'));
     assert.ok(stylesCss.includes('inset: 0 auto 0 0'));
     assert.ok(stylesCss.includes('overflow: hidden'));
     assert.equal(stylesCss.includes('grid-template-columns: 28px minmax(0, 1fr)'), false);
-    assert.ok(indexHtml.includes('id="noteFontInput"'));
+    assert.equal(indexHtml.includes('id="noteFontInput"'), false);
     assert.equal(indexHtml.includes('id="noteFontInfo"'), false);
     assert.ok(appJs.includes('const NOTE_DEFAULT_FONT_SIZE = 15'));
     assert.ok(appJs.includes('const NOTE_MIN_FONT_SIZE = 6'));
     assert.ok(appJs.includes('const NOTE_MAX_FONT_SIZE = 72'));
-    assert.ok(appJs.includes("elements.noteFontDown.addEventListener('click', () => adjustSelectedNoteFont(-1))"));
-    assert.ok(appJs.includes("elements.noteFontUp.addEventListener('click', () => adjustSelectedNoteFont(1))"));
-    assert.ok(appJs.includes("elements.noteFontInput.addEventListener('change', applyTypedNoteFont)"));
+    assert.equal(appJs.includes("elements.noteFontDown.addEventListener('click', () => adjustSelectedNoteFont(-1))"), false);
+    assert.equal(appJs.includes("elements.noteFontUp.addEventListener('click', () => adjustSelectedNoteFont(1))"), false);
+    assert.equal(appJs.includes("elements.noteFontInput.addEventListener('change', applyTypedNoteFont)"), false);
     assert.ok(appJs.includes('fontSize: type === \'note\' ? NOTE_DEFAULT_FONT_SIZE : undefined'));
     assert.ok(appJs.includes('fontSize: NOTE_DEFAULT_FONT_SIZE'));
     assert.ok(appJs.includes('function noteFontSize'));
+    assert.ok(appJs.includes('function noteRenderFontSize'));
     assert.ok(appJs.includes('fontSizeRatio: null'));
     assert.ok(appJs.includes('addTextBoxAnnotation'));
     assert.ok(appJs.includes('focusNoteInput(annotation.id)'));
-    assert.ok(appJs.includes('adjustSelectedNoteFont'));
+    assert.ok(appJs.includes('adjustNoteFont'));
+    assert.ok(appJs.includes('applyNoteToolbarFontInput'));
+    assert.ok(appJs.includes('function wireNoteToolbarButton'));
+    assert.ok(appJs.includes("button.addEventListener('pointerdown'"));
     assert.ok(appJs.includes('noteBoxForSelection'));
+    assert.ok(stylesCss.includes('--note-content-padding-left'));
+    assert.ok(stylesCss.includes('margin: var(--note-content-padding-top) 0 0 var(--note-content-padding-left);'));
+    assert.ok(stylesCss.includes('max-width: calc(100% - var(--note-content-padding-left) - var(--note-content-padding-right));'));
+    assert.equal(stylesCss.includes('padding: calc(1px * var(--pdf-zoom-ratio)) calc(2px * var(--pdf-zoom-ratio));'), false);
     assert.equal(appJs.includes('window.prompt'), false);
     assert.equal(appJs.includes('openNoteComposer'), false);
     assert.equal(appJs.includes('pendingFreeNoteText'), false);
@@ -455,6 +569,23 @@ test('front-end renders editable note boxes and erasable freehand lines', () => 
     assert.ok(appJs.includes('annotation.line.add'));
     assert.ok(appJs.includes('annotation.line.erase'));
     assert.ok(stylesCss.includes('.page-stack.eraser-active .annotation-line'));
+});
+
+test('front-end uses frameless tool buttons instead of heavy button blocks', () => {
+    const primaryCss = stylesCss.match(/button\.primary \{[\s\S]*?\}/)?.[0] || '';
+    const activeToolCss = stylesCss.match(/button\.active-tool \{[\s\S]*?\}/)?.[0] || '';
+
+    assert.ok(primaryCss.includes('background: transparent;'));
+    assert.equal(primaryCss.includes('background: var(--accent);'), false);
+    assert.equal(primaryCss.includes('color: var(--accent);'), false);
+    assert.ok(activeToolCss.includes('background: var(--tool-selected);'));
+    assert.ok(activeToolCss.includes('font-weight: 600;'));
+    assert.equal(activeToolCss.includes('color: var(--accent);'), false);
+    assert.equal(activeToolCss.includes('box-shadow: inset 0 -2px 0 var(--accent);'), false);
+    assert.ok(indexHtml.includes('title="翻译左侧输入框中的文本"'));
+    assert.ok(appJs.includes("elements.lineMode.addEventListener('click'"));
+    assert.ok(appJs.includes("elements.eraserMode.addEventListener('click'"));
+    assert.ok(appJs.includes("elements.lineMode.textContent = '绘制'"));
 });
 
 test('front-end supports sending image attachments to AI', () => {
@@ -486,6 +617,8 @@ test('front-end keeps empty reader and text inputs visually quiet', () => {
 
 test('front-end supports page image actions and right-click visual selection', () => {
     const topChromeHtml = indexHtml.slice(indexHtml.indexOf('<header class="top-chrome">'), indexHtml.indexOf('<main id="appShell"'));
+    const explainCurrentPageJs = appJs.slice(appJs.indexOf('async function explainCurrentPage'), appJs.indexOf('async function translateCurrentPage'));
+    const explainVisualSelectionJs = appJs.slice(appJs.indexOf('async function explainVisualSelectionFromAction'), appJs.indexOf('async function translateVisualSelectionFromAction'));
 
     assert.equal(indexHtml.includes('id="explainPage"'), false);
     assert.equal(indexHtml.includes('id="translatePage"'), false);
@@ -505,6 +638,9 @@ test('front-end supports page image actions and right-click visual selection', (
     assert.equal(appJs.includes('function drawVisualSelectionPath'), false);
     assert.ok(appJs.includes('function explainCurrentPage'));
     assert.ok(appJs.includes('function translateCurrentPage'));
+    assert.ok(explainCurrentPageJs.includes("mode: 'explain'"));
+    assert.equal(explainCurrentPageJs.includes("mode: 'ask'"), false);
+    assert.equal(explainCurrentPageJs.includes('请根据图片和页面上下文'), false);
     assert.ok(appJs.includes('function startVisualSelection'));
     assert.ok(appJs.includes('function onVisualSelectionStyleChanged'));
     assert.ok(appJs.includes('function visualSelectionStyle'));
@@ -520,6 +656,9 @@ test('front-end supports page image actions and right-click visual selection', (
     assert.ok(appJs.includes('pushVisualSelectionPoint'));
     assert.ok(appJs.includes('function explainVisualSelectionFromAction'));
     assert.ok(appJs.includes('function translateVisualSelectionFromAction'));
+    assert.ok(explainVisualSelectionJs.includes("mode: 'explain'"));
+    assert.equal(explainVisualSelectionJs.includes("mode: 'ask'"), false);
+    assert.equal(explainVisualSelectionJs.includes('请识别并讲解${label}中的内容'), false);
     assert.ok(appJs.includes("logClient('pdf.image.capture'"));
     assert.ok(appJs.includes("logClient('visual.selection.ready'"));
     assert.ok(stylesCss.includes('.visual-selection-rect'));

@@ -5,44 +5,27 @@ import { resolveResponseTextPath } from '../core/openaiResponseUtils';
 
 export class SettingsValidationError extends Error {}
 
-const defaultSystemPrompt = '你是计算机课程 PDF 助教。回答必须完全基于用户提供的 PDF 选区与周围页面上下文，不要编造外部资料。默认使用中英双语：中文解释为主，关键术语保留英文原词。只解释用户选中的内容或追问的问题，周围页面上下文只用于消歧、定位定义和补足前后逻辑。';
+const defaultSystemPrompt = '你是计算机课程 PDF 助教。回答必须基于用户提供的 PDF 文本、页面截图、圈选截图、周围页面上下文和用户问题，不要编造外部资料。截图和 PDF 文本都是可用依据；当请求包含截图时，把截图用于理解其中的课程知识内容，PDF 文本层和页面上下文用于辅助校验、补足不可见文字和消歧。默认使用中英双语：中文解释为主，关键术语保留英文原词。只解释用户选中的内容、截图中与任务相关的内容或追问的问题；不要主动描述页面出处、导航栏、页码、颜色和版式，除非用户明确要求。';
 
 const defaultExplainPromptTemplate = [
-    '请基于 PDF 周围页面上下文，精准讲解用户选中的部分。',
+    '请快速讲解用户指定的 PDF 内容。',
     '',
-    '## 来源',
-    '{{source}}',
-    '',
-    '## 用户选区（只讲解这部分）',
+    '目标内容：',
     '{{text}}',
     '',
-    '## 周围页面上下文（仅用于理解，不要泛泛复述）',
+    '必要上下文：',
     '{{pageContext}}',
     '',
-    '## 输出要求',
-    '1. 使用 Markdown。',
-    '2. 先给出“结构化知识点”：用层级项目符号拆出概念、机制、流程、因果关系。',
-    '3. 中英双语解释：中文说明为主，关键术语写成“中文解释 (English term)”。',
-    '4. 完全基于上下文，说明该选区在本页/相邻页中的精准含义。',
-    '5. 如果上下文不足，明确说“上下文不足”，不要猜测。',
-    '6. 不要讲解未被选中的大段背景。'
+    '要求：中文为主，关键英文术语保留原词；先给一句话解释，再列 2-5 个关键点；聚焦知识内容，不主动讲页面出处、导航栏、页码、颜色和版式；不要扩展未选中的背景。'
 ].join('\n');
 
 const defaultTranslatePromptTemplate = [
-    '请把下面 PDF 选中文本做结构化翻译。',
+    '请快速、准确地把下面 PDF 选中文本翻译成中文。',
     '',
-    '## 来源',
-    '{{source}}',
+    '只输出译文；不要解释、不要词汇表、不要标题、不要扩展。',
+    '必要的英文术语保留英文原词，可写作“中文 (English term)”。',
     '',
-    '## 原文',
-    '{{text}}',
-    '',
-    '## 输出要求',
-    '1. 使用 Markdown。',
-    '2. 先输出“整段翻译”：完整、通顺地翻译整段选中文本。',
-    '3. 再输出“关键词汇对照”：从整段翻译中挑出关键中文词组，并用括号补充英文原词，例如：操作系统 (operating system)。',
-    '4. 最后输出“关键单词讲解”：解释重要英文词/短语的通用释义、在本段里的具体含义、为什么这样翻译。',
-    '5. 不要加入与原文无关的扩展内容。'
+    '{{text}}'
 ].join('\n');
 
 const defaultFollowupPromptTemplate = [
@@ -146,11 +129,13 @@ export function loadConfig(cwd = process.cwd(), env = process.env): AppConfig {
             anthropicMaxTokens: numberValue(env.AI_TUTOR_ANTHROPIC_MAX_TOKENS ?? fileConfig.provider?.anthropicMaxTokens, 1024),
             extraHeaders: stringifyRecord(parseObject(env.AI_TUTOR_EXTRA_HEADERS_JSON, fileConfig.provider?.extraHeaders)),
             extraBody: parseObject(env.AI_TUTOR_EXTRA_BODY_JSON, fileConfig.provider?.extraBody),
-            mockChunkDelayMs: numberValue(env.AI_TUTOR_MOCK_DELAY_MS ?? fileConfig.provider?.mockChunkDelayMs, 25)
+            mockChunkDelayMs: numberValue(env.AI_TUTOR_MOCK_DELAY_MS ?? fileConfig.provider?.mockChunkDelayMs, 25),
+            deepSeekThinkingTranslate: booleanValue(env.AI_TUTOR_DEEPSEEK_THINKING_TRANSLATE ?? fileConfig.provider?.deepSeekThinkingTranslate, false),
+            deepSeekThinkingExplain: booleanValue(env.AI_TUTOR_DEEPSEEK_THINKING_EXPLAIN ?? fileConfig.provider?.deepSeekThinkingExplain, false)
         },
-        systemPrompt: promptValue(env.AI_TUTOR_SYSTEM_PROMPT, fileConfig.systemPrompt, defaultSystemPrompt, '术语对照'),
-        explainPromptTemplate: promptValue(env.AI_TUTOR_EXPLAIN_PROMPT, fileConfig.explainPromptTemplate, defaultExplainPromptTemplate, '一句话总结'),
-        translatePromptTemplate: promptValue(env.AI_TUTOR_TRANSLATE_PROMPT, fileConfig.translatePromptTemplate, defaultTranslatePromptTemplate, '不要扩写讲解'),
+        systemPrompt: promptValue(env.AI_TUTOR_SYSTEM_PROMPT, fileConfig.systemPrompt, defaultSystemPrompt, '术语对照', 'PDF 选区与周围页面上下文，不要编造外部资料'),
+        explainPromptTemplate: promptValue(env.AI_TUTOR_EXPLAIN_PROMPT, fileConfig.explainPromptTemplate, defaultExplainPromptTemplate, '一句话总结', '结构化知识点', '周围页面上下文'),
+        translatePromptTemplate: promptValue(env.AI_TUTOR_TRANSLATE_PROMPT, fileConfig.translatePromptTemplate, defaultTranslatePromptTemplate, '不要扩写讲解', '结构化翻译', '关键单词讲解'),
         followupPromptTemplate: promptValue(env.AI_TUTOR_FOLLOWUP_PROMPT, fileConfig.followupPromptTemplate, defaultFollowupPromptTemplate, '标注引用到的关键英文短语'),
         maxSelectionChars: numberValue(env.AI_TUTOR_MAX_SELECTION_CHARS ?? migrateMaxSelectionChars(fileConfig.maxSelectionChars), 6000)
     };
@@ -176,7 +161,9 @@ export function publicSettingsFromConfig(config: AppConfig): PublicSettings {
             anthropicBeta: config.provider.anthropicBeta,
             anthropicMaxTokens: config.provider.anthropicMaxTokens,
             extraHeadersJson: JSON.stringify(config.provider.extraHeaders, null, 2),
-            extraBodyJson: JSON.stringify(config.provider.extraBody, null, 2)
+            extraBodyJson: JSON.stringify(config.provider.extraBody, null, 2),
+            deepSeekThinkingTranslate: config.provider.deepSeekThinkingTranslate,
+            deepSeekThinkingExplain: config.provider.deepSeekThinkingExplain
         },
         systemPrompt: config.systemPrompt,
         explainPromptTemplate: config.explainPromptTemplate,
@@ -217,7 +204,9 @@ export function applySettingsUpdate(current: AppConfig, update: SettingsUpdate):
             anthropicMaxTokens: Math.max(1, numberValue(providerUpdate.anthropicMaxTokens ?? current.provider.anthropicMaxTokens, current.provider.anthropicMaxTokens)),
             extraHeaders: stringifyRecord(parseObject(providerUpdate.extraHeadersJson, current.provider.extraHeaders)),
             extraBody: parseObject(providerUpdate.extraBodyJson, current.provider.extraBody),
-            mockChunkDelayMs: current.provider.mockChunkDelayMs
+            mockChunkDelayMs: current.provider.mockChunkDelayMs,
+            deepSeekThinkingTranslate: booleanValue(providerUpdate.deepSeekThinkingTranslate ?? current.provider.deepSeekThinkingTranslate, current.provider.deepSeekThinkingTranslate),
+            deepSeekThinkingExplain: booleanValue(providerUpdate.deepSeekThinkingExplain ?? current.provider.deepSeekThinkingExplain, current.provider.deepSeekThinkingExplain)
         },
         systemPrompt: stringValue(update.systemPrompt ?? current.systemPrompt),
         explainPromptTemplate: stringValue(update.explainPromptTemplate ?? current.explainPromptTemplate),
@@ -248,7 +237,9 @@ export function saveConfigFile(config: AppConfig, cwd = process.cwd(), configure
             anthropicMaxTokens: config.provider.anthropicMaxTokens,
             extraHeaders: config.provider.extraHeaders,
             extraBody: config.provider.extraBody,
-            mockChunkDelayMs: config.provider.mockChunkDelayMs
+            mockChunkDelayMs: config.provider.mockChunkDelayMs,
+            deepSeekThinkingTranslate: config.provider.deepSeekThinkingTranslate,
+            deepSeekThinkingExplain: config.provider.deepSeekThinkingExplain
         },
         systemPrompt: config.systemPrompt,
         explainPromptTemplate: config.explainPromptTemplate,
@@ -409,14 +400,14 @@ function normalizeApiKeyPrefix(value: unknown): string {
     return value.replace(/^\s+/, '');
 }
 
-function promptValue(envValue: unknown, fileValue: unknown, defaultValue: string, legacyMarker: string): string {
+function promptValue(envValue: unknown, fileValue: unknown, defaultValue: string, ...legacyMarkers: string[]): string {
     if (typeof envValue === 'string' && envValue.trim()) {
         return envValue.trim();
     }
     if (typeof fileValue !== 'string' || !fileValue.trim()) {
         return defaultValue;
     }
-    return fileValue.includes(legacyMarker) ? defaultValue : fileValue.trim();
+    return legacyMarkers.some((marker) => fileValue.includes(marker)) ? defaultValue : fileValue.trim();
 }
 
 function migrateMaxSelectionChars(value: unknown): unknown {
@@ -430,6 +421,25 @@ function stringValue(value: unknown): string {
 function numberValue(value: unknown, fallback: number): number {
     const num = Number(value);
     return Number.isFinite(num) ? num : fallback;
+}
+
+function booleanValue(value: unknown, fallback: boolean): boolean {
+    if (typeof value === 'boolean') {
+        return value;
+    }
+    if (typeof value === 'number') {
+        return value !== 0;
+    }
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (['true', '1', 'yes', 'on'].includes(normalized)) {
+            return true;
+        }
+        if (['false', '0', 'no', 'off'].includes(normalized)) {
+            return false;
+        }
+    }
+    return fallback;
 }
 
 function parseObject(raw: unknown, fallback: unknown): Record<string, unknown> {
