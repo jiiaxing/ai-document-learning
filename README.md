@@ -1,179 +1,44 @@
-# AI Document Learning Desktop
+# AI PDF Tutor 快捷键操作
 
-AI Document Learning Desktop is an Electron-based desktop application for AI-assisted PDF reading and study workflows.
+## 阅读
 
-The current application provides local PDF reading, text selection, page and region image capture, streaming AI explanation and translation, Markdown rendering, and local annotation tools.
+| 快捷键 / 操作 | 效果 |
+| --- | --- |
+| `Ctrl` + 鼠标滚轮 | 以鼠标位置为中心自由缩放 PDF |
+| `Command` + 鼠标滚轮 | macOS 环境下以鼠标位置为中心自由缩放 PDF |
+| `→` / `PageDown` | 下一页 |
+| `←` / `PageUp` | 上一页 |
+| `↓` | 向下滚动；单页模式到页尾后翻到下一页 |
+| `↑` | 向上滚动；单页模式到页首后翻到上一页 |
+| 鼠标滚轮 | 连续模式正常滚动；单页模式到页首/页尾后翻页 |
+| 页码输入框内按 `Enter` | 跳转到输入的页码 |
 
-## Architecture
+## AI 输入
 
-```text
-src/desktop/              Electron main process
-src/standalone/           Local HTTP server, configuration, AI provider layer
-src/standalone-tests/     Server and public asset tests
-public/                   Renderer assets loaded by the Electron window
-scripts/                  Smoke test scripts
-```
+| 快捷键 / 操作 | 效果 |
+| --- | --- |
+| AI 讲解输入框内按 `Ctrl` + `Enter` | 发送当前问题 |
+| 翻译输入框内按 `Ctrl` + `Enter` | 发送当前翻译文本 |
+| AI 讲解输入框内按 `Command` + `Enter` | macOS 环境下发送当前问题 |
+| 翻译输入框内按 `Command` + `Enter` | macOS 环境下发送当前翻译文本 |
+| 选中 PDF 文本 | 在自动功能关闭时弹出“讲解 / 翻译”操作 |
+| 右键拖选页面区域 | 对圈选或框选区域进行讲解 / 翻译 |
 
-## Requirements
+## 面板
 
-- Node.js 22+
-- npm
-- Windows for Electron packaging scripts
+| 快捷键 / 操作 | 效果 |
+| --- | --- |
+| `Esc` | 关闭设置面板、取消笔记放置或清除当前页面圈选 |
+| 拖动左右分隔条 | 调整翻译栏或 AI 讲解栏宽度 |
+| 分隔条聚焦后按 `←` / `→` | 微调侧栏宽度 |
+| 分隔条聚焦后按 `Shift` + `←` / `Shift` + `→` | 快速调整侧栏宽度 |
 
-## Install
+## 笔记
 
-```powershell
-npm install
-```
-
-## Development
-
-Run the desktop application:
-
-```powershell
-npm.cmd run desktop
-```
-
-Run the local web server only:
-
-```powershell
-npm.cmd run compile
-npm.cmd start
-```
-
-Default local server:
-
-```text
-http://127.0.0.1:5178
-```
-
-If the default port is unavailable, the server automatically tries the next available port.
-
-## Scripts
-
-```powershell
-npm.cmd run compile   # TypeScript build
-npm.cmd test          # Unit and asset tests
-npm.cmd run lint      # ESLint
-npm.cmd run desktop   # Run Electron desktop app
-npm.cmd run pack:win  # Build unpacked Windows desktop app
-npm.cmd run dist:win  # Build Windows installer
-```
-
-## Build
-
-Create an unpacked Windows desktop build:
-
-```powershell
-npm.cmd run pack:win
-```
-
-Output:
-
-```text
-release/win-unpacked/AI PDF Tutor.exe
-```
-
-Create a Windows installer:
-
-```powershell
-npm.cmd run dist:win
-```
-
-Build outputs are generated under `release/`.
-
-## Configuration
-
-Use the example configuration as a template:
-
-```text
-ai-tutor.config.example.json
-```
-
-Local runtime configuration:
-
-```text
-ai-tutor.config.json
-```
-
-Standalone reading files are stored under `library/` by default. Each imported PDF gets its own copied source PDF and notes file.
-
-For desktop builds, runtime configuration and logs are stored in the Electron user data directory:
-
-```text
-C:\Users\<user>\AppData\Roaming\AI PDF Tutor\
-```
-
-Desktop reading files are stored in the same user data directory under `library/`.
-
-The default provider preset is DeepSeek. The settings drawer also includes Mock, OpenAI / GPT, and custom OpenAI-compatible endpoints.
-
-Example OpenAI provider:
-
-```json
-{
-  "provider": {
-    "preset": "openai",
-    "kind": "openaiCompatible",
-    "protocol": "openai",
-    "endpoint": "https://api.openai.com/v1/chat/completions",
-    "model": "gpt-5",
-    "apiKey": "YOUR_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "apiKeyPrefix": "Bearer "
-  }
-}
-```
-
-Example DeepSeek provider:
-
-```json
-{
-  "provider": {
-    "preset": "deepseek",
-    "kind": "openaiCompatible",
-    "protocol": "openai",
-    "endpoint": "https://api.deepseek.com/chat/completions",
-    "model": "deepseek-v4-flash-vision-exp",
-    "apiKey": "YOUR_DEEPSEEK_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "apiKeyPrefix": "Bearer "
-  }
-}
-```
-
-## Features
-
-- Local PDF opening and rendering
-- Reading file library with imported PDF copies and per-document notes
-- Single-page and continuous reading modes
-- Page navigation, direct page jumping, and Ctrl+wheel zoom
-- Selected-text explanation and translation
-- Page-level explanation and translation
-- Region screenshot explanation and translation
-- Markdown rendering for AI responses
-- Image attachments for vision-capable models
-- Local highlights, notes, freehand lines, and eraser
-- OpenAI-compatible provider configuration
-- Local developer logs and smoke tests
-
-## Repository Policy
-
-Source code, templates, tests, and scripts are committed to the repository.
-
-Local configuration, logs, PDF files, dependency folders, build output, and packaged artifacts are ignored by `.gitignore`.
-
-## Smoke Tests
-
-Run the Electron desktop smoke test:
-
-```powershell
-npm.cmd run compile
-.\node_modules\.bin\electron.cmd out\desktop\main.js --smoke-test
-```
-
-Run the packaged app smoke test after `pack:win`:
-
-```powershell
-.\release\win-unpacked\AI PDF Tutor.exe --smoke-test
-```
+| 快捷键 / 操作 | 效果 |
+| --- | --- |
+| 笔记编辑框内按 `Esc` | 结束当前笔记编辑 |
+| 笔记字号输入框内按 `Enter` | 应用当前字号 |
+| 笔记字号输入框内按 `Esc` | 放弃本次字号输入并还原 |
+| 开启“绘制”后拖动 PDF 页面 | 绘制自由线条 |
+| 开启“橡皮”后点击或划过线条 | 删除接触到的线条 |
