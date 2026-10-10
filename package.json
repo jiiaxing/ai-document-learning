@@ -2,7 +2,7 @@
   "name": "ai-pdf-tutor-standalone",
   "displayName": "AI PDF Tutor Standalone",
   "description": "Standalone PDF reader with streaming AI explanations for selected text.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "AI PDF Tutor",
   "private": true,
   "main": "./out/desktop/main.js",

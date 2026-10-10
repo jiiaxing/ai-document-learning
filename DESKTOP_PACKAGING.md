@@ -35,7 +35,7 @@ release\win-unpacked\AI PDF Tutor.exe
 For sharing without an installer, zip the `release\win-unpacked` folder. The current verified zip artifact is:
 
 ```text
-release\AI-PDF-Tutor-0.1.0-win-x64.zip
+release\AI-PDF-Tutor-0.1.1-win-x64.zip
 ```
 
 ## Smoke Test
