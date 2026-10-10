@@ -2,7 +2,7 @@
   "name": "ai-pdf-tutor-standalone",
   "displayName": "AI PDF Tutor Standalone",
   "description": "Standalone PDF reader with streaming AI explanations for selected text.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "author": "AI PDF Tutor",
   "private": true,
   "main": "./out/desktop/main.js",
@@ -10,7 +10,7 @@
     "compile": "tsc -p ./",
     "start": "node out/standalone/server.js",
     "dev": "npm.cmd run compile && node out/standalone/server.js",
-    "test": "npm.cmd run compile && node out/standalone-tests/selectionGate.test.js && node out/standalone-tests/server.test.js && node out/standalone-tests/publicAssets.test.js && node out/standalone-tests/readerScroll.test.js && node out/standalone-tests/readerLayout.test.js",
+    "test": "npm.cmd run compile && node out/standalone-tests/selectionGate.test.js && node out/standalone-tests/server.test.js && node out/standalone-tests/publicAssets.test.js && node out/standalone-tests/readerScroll.test.js && node out/standalone-tests/readerLayout.test.js && node out/standalone-tests/desktopUpdates.test.js && node out/standalone-tests/updateIpc.test.js && node out/standalone-tests/updatePreparation.test.js",
     "lint": "eslint src/desktop src/standalone src/standalone-tests",
     "start:web": "node out/standalone/server.js",
     "desktop": "npm.cmd run compile && electron out/desktop/main.js",
@@ -18,10 +18,13 @@
     "dist:win": "npm.cmd run compile && electron-builder --win nsis"
   },
   "dependencies": {
-    "pdfjs-dist": "^4.10.38"
+    "electron-updater": "^6.8.9",
+    "pdfjs-dist": "^4.10.38",
+    "semver": "^7.8.5"
   },
   "devDependencies": {
     "@types/node": "22.x",
+    "@types/semver": "^7.8.0",
     "electron": "^41.3.0",
     "electron-builder": "^26.8.1",
     "eslint": "^9.39.3",
@@ -34,6 +37,13 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "jiiaxing",
+        "repo": "ai-document-learning"
+      }
+    ],
     "files": [
       "out/**/*",
       "public/**/*",

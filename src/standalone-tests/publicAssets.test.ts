@@ -714,5 +714,8 @@ test('desktop wrapper is configured for packaged Electron builds', () => {
     assert.ok(desktopMainTs.includes("app.getPath('userData')"));
     assert.ok(desktopMainTs.includes("label: '编辑'"));
     assert.ok(desktopMainTs.includes("role: 'paste'"));
-    assert.equal(desktopMainTs.includes('sandbox: true'), false);
+    assert.ok(desktopMainTs.includes('sandbox: true'));
+    assert.ok(desktopMainTs.includes("preload: join(__dirname, 'preload.js')"));
+    assert.ok(desktopMainTs.includes('contextIsolation: true'));
+    assert.ok(desktopMainTs.includes('nodeIntegration: false'));
 });

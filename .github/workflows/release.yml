@@ -1,0 +1,157 @@
+name: Build Windows release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable release tag, for example v0.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Validate stable version tag
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw 'Release tag must be an exact stable version such as v0.2.0.'
+          }
+
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Validate package version and inspect release assets
+        id: release
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseVersion = $env:RELEASE_TAG.Substring(1)
+          $package = Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json
+          if ($package.version -cne $releaseVersion) {
+            throw "Tag version $releaseVersion does not match package.json version $($package.version)."
+          }
+          $releaseJson = gh release view $env:RELEASE_TAG --json 'tagName,isDraft,isPrerelease,assets'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the existing GitHub Release.' }
+          $release = $releaseJson | ConvertFrom-Json
+          if ($release.isDraft -or $release.isPrerelease -or $release.tagName -cne $env:RELEASE_TAG) {
+            throw 'Only an existing, published stable Release can receive update assets.'
+          }
+          $requiredAssets = @(
+            'latest.yml',
+            "AI-PDF-Tutor-$releaseVersion-Setup.exe",
+            "AI-PDF-Tutor-$releaseVersion-Setup.exe.blockmap",
+            "AI-PDF-Tutor-$releaseVersion-win-x64.zip"
+          )
+          $presentAssets = @($release.assets | Where-Object { $_.size -gt 0 } | ForEach-Object { $_.name })
+          $missingAssets = @($requiredAssets | Where-Object { $presentAssets -cnotcontains $_ })
+          if ($missingAssets.Count -gt 0 -and $presentAssets -ccontains 'latest.yml') {
+            throw "An update manifest is already published, but assets are missing: $($missingAssets -join ', '). No assets were changed. Restore the missing original files from the same build, or publish a new version; rebuilding could invalidate the published manifest's installer checksum."
+          }
+          $complete = if ($missingAssets.Count -eq 0) { 'true' } else { 'false' }
+          "complete=$complete" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          "version=$releaseVersion" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          if ($complete -eq 'true') {
+            Write-Host 'The installer, blockmap, ZIP, and update manifest are already present. No assets will be replaced.'
+          } else {
+            Write-Host "Missing assets: $($missingAssets -join ', '). Building all update assets together."
+          }
+
+      - name: Set up Node.js
+        if: steps.release.outputs.complete != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.release.outputs.complete != 'true'
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run tests
+        if: steps.release.outputs.complete != 'true'
+        run: |
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run lint
+        if: steps.release.outputs.complete != 'true'
+        run: |
+          npm run lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Windows x64 installer
+        if: steps.release.outputs.complete != 'true'
+        run: |
+          npm run dist:win -- --x64 --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify update download and checksum rejection
+        if: steps.release.outputs.complete != 'true'
+        run: |
+          node scripts/update-download-smoke.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Create portable ZIP and checksums
+        if: steps.release.outputs.complete != 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zipPath = "release/AI-PDF-Tutor-$env:RELEASE_VERSION-win-x64.zip"
+          Compress-Archive -Path 'release/win-unpacked/*' -DestinationPath $zipPath -Force
+          $assetPaths = @(
+            "release/AI-PDF-Tutor-$env:RELEASE_VERSION-Setup.exe",
+            "release/AI-PDF-Tutor-$env:RELEASE_VERSION-Setup.exe.blockmap",
+            $zipPath,
+            'release/latest.yml'
+          )
+          $checksums = foreach ($assetPath in $assetPaths) {
+            $asset = Get-Item -LiteralPath $assetPath
+            if ($asset.Length -eq 0) { throw "Empty release asset: $assetPath" }
+            $hash = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($asset.Name)"
+          }
+          $checksums | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding utf8NoBOM
+
+      - name: Upload application assets
+        if: steps.release.outputs.complete != 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          $releaseAssets = @(
+            "release/AI-PDF-Tutor-$env:RELEASE_VERSION-Setup.exe",
+            "release/AI-PDF-Tutor-$env:RELEASE_VERSION-Setup.exe.blockmap",
+            "release/AI-PDF-Tutor-$env:RELEASE_VERSION-win-x64.zip",
+            'release/SHA256SUMS.txt'
+          )
+          gh release upload $env:RELEASE_TAG @releaseAssets --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish update manifest last
+        if: steps.release.outputs.complete != 'true'
+        run: |
+          gh release upload $env:RELEASE_TAG release/latest.yml --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

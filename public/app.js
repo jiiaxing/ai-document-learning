@@ -237,6 +237,7 @@ const state = {
     ctrlZoomWheelGuardUntil: 0,
     selectionTimer: 0,
     annotationSaveTimer: 0,
+    annotationSavePromise: null,
     pendingAnnotationSave: null,
     translationAbort: null,
     explainAbort: null,
@@ -247,7 +248,19 @@ const state = {
     imageAttachments: []
 };
 
+window.prepareForDesktopUpdate = prepareForDesktopUpdate;
+
 await boot();
+
+async function prepareForDesktopUpdate() {
+    finishActiveNoteEdit();
+    if (state.activeReadingFileId) {
+        saveAnnotations();
+    } else {
+        localStorage.setItem(ANNOTATION_STORE_KEY, JSON.stringify(state.annotations));
+    }
+    await flushPendingAnnotationSave({ throwOnError: true });
+}
 
 async function boot() {
     wireEvents();
@@ -5220,30 +5233,52 @@ function queueReadingFileNotesSave(id, notes) {
     }, 260);
 }
 
-async function flushPendingAnnotationSave() {
+async function flushPendingAnnotationSave(options = {}) {
     window.clearTimeout(state.annotationSaveTimer);
     state.annotationSaveTimer = 0;
+    while (state.annotationSavePromise) {
+        await state.annotationSavePromise.catch(() => {});
+    }
     const pending = state.pendingAnnotationSave;
     if (!pending) {
         return;
     }
     state.pendingAnnotationSave = null;
 
-    try {
-        const response = await fetch(`/api/reading-files/${encodeURIComponent(pending.id)}/notes`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ notes: pending.notes })
-        });
-        const payload = await readJsonResponse(response);
-        const file = parseReadingFile(payload.file);
-        if (file) {
-            upsertReadingFile(file);
+    const savePromise = (async () => {
+        try {
+            const response = await fetch(`/api/reading-files/${encodeURIComponent(pending.id)}/notes`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notes: pending.notes })
+            });
+            const payload = await readJsonResponse(response);
+            const file = parseReadingFile(payload.file);
+            if (file) {
+                upsertReadingFile(file);
+            }
+            logClient('reading_file.notes.saved', { id: pending.id });
+        } catch (error) {
+            state.pendingAnnotationSave ||= pending;
+            flashStatus('批注保存失败');
+            logClient('reading_file.notes.save_error', { id: pending.id, message: messageOf(error) });
+            throw error;
         }
-        logClient('reading_file.notes.saved', { id: pending.id });
+    })();
+    state.annotationSavePromise = savePromise;
+    try {
+        await savePromise;
     } catch (error) {
-        flashStatus('批注保存失败');
-        logClient('reading_file.notes.save_error', { id: pending.id, message: messageOf(error) });
+        if (options.throwOnError) {
+            throw new Error(`批注尚未保存，暂未启动安装：${messageOf(error)}`);
+        }
+    } finally {
+        if (state.annotationSavePromise === savePromise) {
+            state.annotationSavePromise = null;
+        }
+    }
+    if (options.throwOnError && (state.pendingAnnotationSave || state.annotationSavePromise)) {
+        await flushPendingAnnotationSave(options);
     }
 }
 

@@ -141,6 +141,183 @@ body {
     background: #1e1e1e;
 }
 
+.desktop-update-toggle[hidden],
+.desktop-update-dialog [hidden] {
+    display: none;
+}
+
+.desktop-update-toggle.has-update {
+    color: var(--success);
+    font-weight: 600;
+}
+
+.desktop-update-toggle.has-update::before {
+    content: "";
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 7px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.desktop-update-dialog {
+    width: min(560px, calc(100vw - 32px));
+    max-height: calc(100dvh - 40px);
+    margin: auto;
+    padding: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-float);
+}
+
+.desktop-update-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.36);
+}
+
+.desktop-update-header,
+.desktop-update-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 20px;
+    background: var(--surface-2);
+}
+
+.desktop-update-header {
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.desktop-update-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.desktop-update-body {
+    padding: 20px;
+}
+
+.desktop-update-versions,
+.desktop-update-notes-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px 20px;
+}
+
+.desktop-update-versions {
+    color: var(--muted);
+}
+
+.desktop-update-versions strong {
+    margin-left: 5px;
+    color: var(--text);
+}
+
+.desktop-update-status {
+    margin: 16px 0 0;
+    overflow-wrap: anywhere;
+}
+
+.desktop-update-status.is-error {
+    color: var(--danger);
+}
+
+.desktop-update-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.desktop-update-progress-row progress {
+    flex: 1;
+    min-width: 0;
+    height: 10px;
+    accent-color: var(--accent);
+}
+
+.desktop-update-progress-row span {
+    min-width: 4ch;
+    text-align: right;
+}
+
+.desktop-update-note {
+    margin: 16px 0 0;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.desktop-update-notes-section {
+    margin-top: 22px;
+}
+
+.desktop-update-notes-heading h3 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.desktop-update-notes-heading span {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.desktop-update-notes {
+    max-height: min(320px, 38dvh);
+    margin-top: 10px;
+    padding: 14px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface-2);
+    line-height: 1.7;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.desktop-update-notes:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.desktop-update-footer {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    border-top: 1px solid var(--line-soft);
+}
+
+.desktop-update-footer button {
+    min-height: 36px;
+    padding: 0 14px;
+}
+
+.desktop-update-footer .desktop-update-action {
+    border: 1px solid var(--accent-line);
+    background: var(--accent-soft);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.desktop-update-footer .desktop-update-action:not(:disabled):hover {
+    border-color: var(--accent-line);
+    background: var(--tool-selected);
+}
+
 button,
 select,
 textarea,

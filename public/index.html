@@ -170,6 +170,7 @@
                 <button id="restoreAssistant" type="button" title="重新显示 AI 讲解栏" hidden>显示讲解</button>
             </div>
             <div class="toolbar-group settings-group">
+                <button id="desktopUpdateToggle" class="ghost-button desktop-update-toggle" type="button" aria-haspopup="dialog" aria-controls="desktopUpdateDialog" aria-expanded="false" title="检查软件更新" hidden>检查更新</button>
                 <button id="settingsToggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="settingsForm" title="打开设置">设置</button>
             </div>
         </section>
@@ -256,6 +257,37 @@
         </aside>
     </main>
 
+    <dialog id="desktopUpdateDialog" class="desktop-update-dialog" aria-labelledby="desktopUpdateTitle" aria-describedby="desktopUpdateStatus">
+        <div class="desktop-update-header">
+            <h2 id="desktopUpdateTitle">软件更新</h2>
+            <button id="desktopUpdateClose" class="icon-button" type="button" aria-label="关闭软件更新" title="关闭软件更新" autofocus>×</button>
+        </div>
+        <div class="desktop-update-body">
+            <div class="desktop-update-versions">
+                <span>当前版本 <strong id="desktopUpdateCurrentVersion">—</strong></span>
+                <span id="desktopUpdateVersionRow" hidden>新版本 <strong id="desktopUpdateVersion"></strong></span>
+            </div>
+            <p id="desktopUpdateStatus" class="desktop-update-status" role="status" aria-live="polite" aria-atomic="true"></p>
+            <div id="desktopUpdateProgressRow" class="desktop-update-progress-row" hidden>
+                <progress id="desktopUpdateProgress" max="100" value="0" aria-label="更新下载进度"></progress>
+                <span id="desktopUpdateProgressLabel" aria-hidden="true">0%</span>
+            </div>
+            <p id="desktopUpdatePortableNote" class="desktop-update-note" hidden>免安装版将下载并启动安装程序，原 ZIP 文件夹不会被原地替换。安装完成后，请从新建的桌面或开始菜单快捷方式启动新版。</p>
+            <section id="desktopUpdateNotesSection" class="desktop-update-notes-section" aria-labelledby="desktopUpdateNotesTitle" hidden>
+                <div class="desktop-update-notes-heading">
+                    <h3 id="desktopUpdateNotesTitle">新版本说明</h3>
+                    <span id="desktopUpdateReleaseDate"></span>
+                </div>
+                <div id="desktopUpdateNotes" class="desktop-update-notes" tabindex="0" role="region" aria-label="新版本说明内容"></div>
+            </section>
+        </div>
+        <div class="desktop-update-footer">
+            <button id="desktopUpdateCheck" type="button">重新检查</button>
+            <button id="desktopUpdateAction" class="desktop-update-action" type="button" hidden>下载更新</button>
+        </div>
+    </dialog>
+
     <script type="module" src="/app.js"></script>
+    <script type="module" src="/updater.js"></script>
 </body>
 </html>

@@ -1,16 +1,23 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell } from 'electron';
-import { mkdirSync } from 'node:fs';
+import { app, BrowserWindow, ipcMain, Menu, MenuItemConstructorOptions, shell } from 'electron';
+import { autoUpdater } from 'electron-updater';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { loadConfig } from '../standalone/config';
 import { DeveloperLogger } from '../standalone/logger';
 import { startServer } from '../standalone/server';
 import { AppConfig } from '../standalone/types';
+import { UpdateController } from './updateController';
+import { assertTrustedUpdateSender } from './updateIpc';
+import type { InstallMode } from './updateTypes';
 
 type ServerHandle = Awaited<ReturnType<typeof startServer>>;
 
 let mainWindow: BrowserWindow | null = null;
 let serverHandle: ServerHandle | null = null;
 let desktopConfig: AppConfig | null = null;
+let updates: UpdateController | null = null;
+let updateStartupTimer: ReturnType<typeof setTimeout> | undefined;
+let updateInterval: ReturnType<typeof setInterval> | undefined;
 
 app.setName('AI PDF Tutor');
 
@@ -48,6 +55,8 @@ async function createMainWindow(serverUrl: string): Promise<void> {
         webPreferences: {
             contextIsolation: true,
             nodeIntegration: false,
+            sandbox: true,
+            preload: join(__dirname, 'preload.js'),
             spellcheck: true
         }
     });
@@ -59,11 +68,52 @@ async function createMainWindow(serverUrl: string): Promise<void> {
         mainWindow = null;
     });
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        void shell.openExternal(url);
+        if (/^https?:\/\//i.test(url)) {
+            void shell.openExternal(url);
+        }
         return { action: 'deny' };
+    });
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        if (new URL(url).origin !== new URL(serverUrl).origin) {
+            event.preventDefault();
+        }
     });
 
     await mainWindow.loadURL(serverUrl);
+}
+
+function initializeUpdates(): void {
+    const enabled = app.isPackaged && process.platform === 'win32';
+    const installMode: InstallMode = !enabled ? 'unsupported'
+        : existsSync(join(dirname(app.getPath('exe')), 'Uninstall AI PDF Tutor.exe')) ? 'installed' : 'portable';
+    autoUpdater.setFeedURL({ provider: 'github', owner: 'jiiaxing', repo: 'ai-document-learning', private: false });
+    updates = new UpdateController(autoUpdater, {
+        currentVersion: app.getVersion(),
+        installMode,
+        enabled,
+        onStatus: (status) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('updates:status-changed', status);
+            }
+        }
+    });
+    for (const [channel, action] of [
+        ['updates:status', () => updates!.getStatus()],
+        ['updates:check', () => updates!.check()],
+        ['updates:download', () => updates!.download()],
+        ['updates:install', () => updates!.install()]
+    ] as const) {
+        ipcMain.handle(channel, (event) => {
+            assertTrustedUpdateSender(event, mainWindow?.webContents, serverHandle?.url);
+            return action();
+        });
+    }
+    if (enabled) {
+        updateStartupTimer = setTimeout(() => { void updates?.check(); }, 8000);
+        updateInterval = setInterval(() => { void updates?.check(); }, 6 * 60 * 60 * 1000);
+        updateStartupTimer.unref();
+        updateInterval.unref();
+    }
 }
 
 function buildMenu(): void {
@@ -153,11 +203,15 @@ async function bootDesktop(): Promise<void> {
         app.quit();
         return;
     }
+    initializeUpdates();
     buildMenu();
     await createMainWindow(serverHandle.url);
 }
 
 app.on('before-quit', () => {
+    clearTimeout(updateStartupTimer);
+    clearInterval(updateInterval);
+    updates?.dispose();
     serverHandle?.server.close();
 });
 
