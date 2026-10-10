@@ -276,10 +276,10 @@ test('front-end keeps zoom lightweight through Ctrl wheel', () => {
     assert.ok(appJs.includes('const MIN_SCALE = 0.05'));
     assert.ok(appJs.includes('const MAX_SCALE = 5.0'));
     assert.ok(appJs.includes('const MIN_INITIAL_SCALE = 0.8'));
-    assert.ok(appJs.includes('const VIEWER_MIN_AVAILABLE_WIDTH = 520'));
+    assert.equal(appJs.includes('const VIEWER_MIN_AVAILABLE_WIDTH = 520'), false);
     assert.ok(appJs.includes('async function scaleForNewDocument'));
-    assert.ok(appJs.includes('saved >= MIN_INITIAL_SCALE'));
-    assert.ok(appJs.includes('return Math.max(MIN_INITIAL_SCALE, fitScale);'));
+    assert.ok(appJs.includes('Math.min(clamp(saved, MIN_SCALE, MAX_SCALE), fitScale)'));
+    assert.equal(appJs.includes('return Math.max(MIN_INITIAL_SCALE, fitScale);'), false);
     assert.ok(appJs.includes('async function computeFitWidthScale'));
     assert.ok(appJs.includes('async function setScale(nextScale, trigger ='));
     assert.ok(appJs.includes('return scale >= MIN_INITIAL_SCALE ? scale : null;'));

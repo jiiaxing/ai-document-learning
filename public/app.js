@@ -9,7 +9,6 @@ const DEFAULT_AUTO_TRIGGER_PREF_VERSION = 1;
 const MIN_SCALE = 0.05;
 const MIN_INITIAL_SCALE = 0.8;
 const MAX_SCALE = 5.0;
-const VIEWER_MIN_AVAILABLE_WIDTH = 520;
 const PDF_CONTEXT_RADIUS = 1;
 const PAGE_CONTEXT_MAX_CHARS = 5200;
 const SELECTION_CONTEXT_RADIUS = 0;
@@ -224,9 +223,13 @@ const state = {
     eraserPointerId: null,
     noteDrag: null,
     paneResize: null,
+    viewerResizeFrame: 0,
+    viewerResizePending: false,
+    viewerAvailableWidth: 0,
     lastPageTurnAt: 0,
     pageJumpTimer: 0,
     renderLock: false,
+    viewerScrollFrame: 0,
     zoomRenderTimer: 0,
     zoomPreviewFrame: 0,
     pendingZoomAnchor: null,
@@ -332,9 +335,11 @@ function wireEvents() {
     document.addEventListener('keydown', onTextSubmitShortcut, true);
     document.addEventListener('pointerup', onDocumentSelectionPointerUp, true);
     window.addEventListener('resize', () => {
+        applyPaneLayoutPrefs();
         positionSelectionActions();
         positionVisualActions();
     });
+    new ResizeObserver(queueViewerLayout).observe(elements.viewer);
     elements.cancelResponse.addEventListener('click', cancelActiveResponses);
     elements.clearConversation.addEventListener('click', clearConversation);
     elements.clearTranslation.addEventListener('click', clearTranslation);
@@ -381,6 +386,42 @@ function setPaneCollapsed(pane, collapsed) {
     logClient('layout.pane.toggle', { pane, collapsed });
     window.setTimeout(positionSelectionActions, 0);
     window.setTimeout(positionVisualActions, 0);
+}
+
+function queueViewerLayout() {
+    if (state.viewerResizeFrame) {
+        return;
+    }
+    state.viewerResizeFrame = window.requestAnimationFrame(() => {
+        state.viewerResizeFrame = 0;
+        if (state.renderLock) {
+            state.viewerResizePending = true;
+            return;
+        }
+        state.viewerResizePending = false;
+        const width = availableViewerWidth();
+        const previousWidth = state.viewerAvailableWidth;
+        state.viewerAvailableWidth = width;
+        if (!state.pdfDoc || !previousWidth || Math.abs(width - previousWidth) < 1) {
+            return;
+        }
+        const pages = pageNodesForCurrentRender();
+        const baseWidth = Math.max(0, ...pages.map(page =>
+            Number(page.dataset.renderedWidth) / Number(page.dataset.renderScale)));
+        if (!Number.isFinite(baseWidth) || baseWidth <= 0) {
+            return;
+        }
+        const rect = elements.viewer.getBoundingClientRect();
+        const pageNumber = readerMode() === READER_MODE_CONTINUOUS
+            ? visibleContinuousPage() : state.currentPage;
+        const zoomAnchor = actionAnchorFromEvent({
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height * 0.35
+        }, pageNumber);
+        // Preserve the reading position while fitting the newly available space.
+        const nextScale = Math.min(state.scale * width / previousWidth, width / baseWidth);
+        void setScale(nextScale, 'reader-resize', { zoomAnchor, smooth: true });
+    });
 }
 
 function startPaneResize(pane, event) {
@@ -1148,15 +1189,25 @@ async function renderPage(options = {}) {
         }
         setBusy(false);
         updateToolbar();
+        if (state.viewerResizePending) {
+            queueViewerLayout();
+        }
     }
 }
 
 async function renderSinglePage(renderScale = state.scale) {
-    elements.page.className = 'page-wrap';
-    elements.page.dataset.page = String(state.currentPage);
-    const viewport = await renderPdfPage(state.currentPage, elements.page, renderScale);
+    const pageNumber = state.currentPage;
+    const pendingPage = document.createElement('div');
+    pendingPage.className = 'page-wrap';
+    pendingPage.dataset.page = String(pageNumber);
+    const viewport = await renderPdfPage(pageNumber, pendingPage, renderScale);
+    elements.page.className = pendingPage.className;
+    Object.assign(elements.page.dataset, pendingPage.dataset);
+    elements.page.style.width = pendingPage.style.width;
+    elements.page.style.height = pendingPage.style.height;
+    elements.page.replaceChildren(...pendingPage.childNodes);
     logClient('pdf.page.render.done', {
-        page: state.currentPage,
+        page: pageNumber,
         width: Math.round(viewport.width),
         height: Math.round(viewport.height),
         mode: READER_MODE_SINGLE
@@ -1720,21 +1771,25 @@ function zoomAnchorFromWheelEvent(event) {
 }
 
 function onViewerScroll() {
-    positionSelectionActions();
-    positionVisualActions();
-    if (!state.pdfDoc || state.renderLock || readerMode() !== READER_MODE_CONTINUOUS) {
+    if (state.viewerScrollFrame) {
         return;
     }
-    const pageNumber = visibleContinuousPage();
-    if (!pageNumber || pageNumber === state.currentPage) {
-        return;
-    }
-    state.currentPage = pageNumber;
-    updateToolbar();
+    state.viewerScrollFrame = window.requestAnimationFrame(() => {
+        state.viewerScrollFrame = 0;
+        if (state.pdfDoc && !state.renderLock && readerMode() === READER_MODE_CONTINUOUS) {
+            const pageNumber = visibleContinuousPage();
+            if (pageNumber && pageNumber !== state.currentPage) {
+                state.currentPage = pageNumber;
+                updateToolbar();
+            }
+        }
+        positionSelectionActions();
+        positionVisualActions();
+    });
 }
 
 function visibleContinuousPage() {
-    const pages = Array.from(elements.page.querySelectorAll('.page-wrap'));
+    const pages = elements.page.children;
     if (!pages.length) {
         return 0;
     }
@@ -1742,13 +1797,26 @@ function visibleContinuousPage() {
     const targetY = viewerRect.top + viewerRect.height * 0.35;
     let bestPage = 0;
     let bestDistance = Number.POSITIVE_INFINITY;
-    for (const pageNode of pages) {
+    let bestIndex = pages.length;
+    let low = 0;
+    let high = pages.length - 1;
+    while (low <= high) {
+        const index = Math.floor((low + high) / 2);
+        const pageNode = pages[index];
         const rect = pageNode.getBoundingClientRect();
         const center = Math.max(rect.top, Math.min(targetY, rect.bottom));
         const distance = Math.abs(center - targetY);
-        if (distance < bestDistance) {
+        if (distance < bestDistance || (distance === bestDistance && index < bestIndex)) {
             bestDistance = distance;
             bestPage = Number(pageNode.dataset.page || 0);
+            bestIndex = index;
+        }
+        if (rect.bottom < targetY) {
+            low = index + 1;
+        } else if (rect.top > targetY) {
+            high = index - 1;
+        } else {
+            return bestPage;
         }
     }
     return bestPage;
@@ -4572,15 +4640,15 @@ function updateAnnotationControls() {
 
 async function scaleForNewDocument() {
     const saved = Number(state.uiPrefs.scale);
-    if (Number.isFinite(saved) && saved >= MIN_INITIAL_SCALE) {
-        return clamp(saved, MIN_SCALE, MAX_SCALE);
+    const fitScale = await computeInitialScale();
+    if (Number.isFinite(saved) && saved >= MIN_SCALE) {
+        return Math.min(clamp(saved, MIN_SCALE, MAX_SCALE), fitScale);
     }
-    return computeInitialScale();
+    return fitScale;
 }
 
 async function computeInitialScale() {
-    const fitScale = await computeFitWidthScale();
-    return Math.max(MIN_INITIAL_SCALE, fitScale);
+    return computeFitWidthScale();
 }
 
 async function computeFitWidthScale() {
@@ -4596,11 +4664,9 @@ async function computeFitWidthScale() {
 }
 
 function availableViewerWidth() {
-    return Math.max(
-        VIEWER_MIN_AVAILABLE_WIDTH,
-        (elements.viewer?.clientWidth || 0) - 56,
-        Math.round((window.innerWidth || 0) * 0.42)
-    );
+    const style = window.getComputedStyle(elements.viewer);
+    const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    return Math.max(1, elements.viewer.clientWidth - padding - 2);
 }
 
 async function buildSelectionPageContext(pageNumber) {
@@ -4997,17 +5063,24 @@ function applyPaneLayoutPrefs() {
     );
     const translationCollapsed = state.uiPrefs.translationPaneCollapsed === true;
     const assistantCollapsed = state.uiPrefs.assistantPaneCollapsed === true;
+    const shellWidth = elements.appShell.clientWidth || window.innerWidth;
+    const resizersWidth = (translationCollapsed ? 0 : 8) + (assistantCollapsed ? 0 : 8);
+    const requestedWidth = (translationCollapsed ? 0 : translationWidth) + (assistantCollapsed ? 0 : assistantWidth);
+    const sidebarBudget = Math.max(0, shellWidth - Math.min(420, shellWidth * 0.45) - resizersWidth);
+    const widthRatio = requestedWidth > 0 ? Math.min(1, sidebarBudget / requestedWidth) : 1;
+    const displayedTranslationWidth = translationWidth * widthRatio;
+    const displayedAssistantWidth = assistantWidth * widthRatio;
 
     state.uiPrefs.translationPaneWidth = translationWidth;
     state.uiPrefs.assistantPaneWidth = assistantWidth;
-    elements.appShell.style.setProperty('--translation-pane-width', `${translationWidth}px`);
-    elements.appShell.style.setProperty('--assistant-pane-width', `${assistantWidth}px`);
+    elements.appShell.style.setProperty('--translation-pane-width', `${displayedTranslationWidth}px`);
+    elements.appShell.style.setProperty('--assistant-pane-width', `${displayedAssistantWidth}px`);
     elements.appShell.classList.toggle('translation-collapsed', translationCollapsed);
     elements.appShell.classList.toggle('assistant-collapsed', assistantCollapsed);
     elements.translationPane.setAttribute('aria-hidden', String(translationCollapsed));
     elements.assistantPane.setAttribute('aria-hidden', String(assistantCollapsed));
-    elements.leftPaneResizer.setAttribute('aria-valuenow', String(Math.round(translationWidth)));
-    elements.rightPaneResizer.setAttribute('aria-valuenow', String(Math.round(assistantWidth)));
+    elements.leftPaneResizer.setAttribute('aria-valuenow', String(Math.round(displayedTranslationWidth)));
+    elements.rightPaneResizer.setAttribute('aria-valuenow', String(Math.round(displayedAssistantWidth)));
     elements.restoreTranslation.hidden = !translationCollapsed;
     elements.restoreAssistant.hidden = !assistantCollapsed;
     elements.paneRestoreBar.hidden = !translationCollapsed && !assistantCollapsed;

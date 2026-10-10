@@ -67,7 +67,7 @@ ws.addEventListener('open', async () => {
             location.href = location.origin + '/?pdf=test.pdf&layoutSmoke=' + Date.now();
             true;
         `);
-        await waitUntil('document.getElementById("clientLog")?.textContent.includes(\'"scale":2.32\')');
+        await waitUntil('document.getElementById("clientLog")?.textContent.includes(\'pdf.open.done\')');
         await waitUntil('document.getElementById("pageInfo")?.textContent?.includes("/") && !document.getElementById("pageInfo").textContent.startsWith("-")');
         await waitUntil('Boolean(document.querySelector(".page-wrap[data-page=\\"1\\"] canvas"))');
 
@@ -76,8 +76,12 @@ ws.addEventListener('open', async () => {
             const translation = document.getElementById('translationPane').getBoundingClientRect();
             const reader = document.querySelector('.reader-pane').getBoundingClientRect();
             const assistant = document.getElementById('assistantPane').getBoundingClientRect();
+            const viewer = document.getElementById('viewer');
+            const page = document.querySelector('.page-wrap').getBoundingClientRect();
+            const viewerRect = viewer.getBoundingClientRect();
             return {
-                defaultScaleLogged: document.getElementById('clientLog').textContent.includes('"scale":2.32'),
+                pdfFitsReader: page.left >= viewerRect.left && page.right <= viewerRect.right
+                    && viewer.scrollWidth <= viewer.clientWidth + 1,
                 shellWidth: Math.round(shell.width),
                 translationWidth: Math.round(translation.width),
                 readerWidth: Math.round(reader.width),
@@ -92,7 +96,7 @@ ws.addEventListener('open', async () => {
             throw new Error(`Unexpected CDP result: ${JSON.stringify(result)}`);
         }
         if (
-            value.defaultScaleLogged !== true
+            value.pdfFitsReader !== true
             || value.translationRatio < 0.20
             || value.translationRatio > 0.24
             || value.readerRatio < 0.48

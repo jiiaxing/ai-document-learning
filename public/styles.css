@@ -854,7 +854,7 @@ textarea:focus {
     min-height: 0;
     display: grid;
     position: relative;
-    grid-template-columns: var(--translation-track) var(--left-resizer-track) minmax(420px, 1fr) var(--right-resizer-track) var(--assistant-track);
+    grid-template-columns: var(--translation-track) var(--left-resizer-track) minmax(0, 1fr) var(--right-resizer-track) var(--assistant-track);
     overflow: hidden;
 }
 
@@ -927,6 +927,7 @@ textarea:focus {
     min-width: 0;
     min-height: 0;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     overflow: hidden;
 }
@@ -1223,10 +1224,13 @@ textarea:focus {
 }
 
 .viewer {
+    min-width: 0;
     min-height: 0;
     overflow: scroll;
     display: grid;
-    place-items: start center;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    justify-items: safe center;
     padding: 24px;
     scrollbar-gutter: stable both-edges;
     scrollbar-color: var(--scroll-thumb) var(--scroll-track);
@@ -1244,9 +1248,11 @@ textarea:focus {
 
 .reader-footer {
     display: flex;
+    min-width: 0;
+    overflow-x: auto;
     flex-wrap: nowrap;
     align-items: center;
-    justify-content: center;
+    justify-content: safe center;
     gap: 10px;
     min-height: 54px;
     padding: 9px 14px;
@@ -1369,7 +1375,7 @@ textarea:focus {
 .page-stack {
     width: 100%;
     display: grid;
-    justify-items: center;
+    justify-items: safe center;
     gap: 22px;
 }
 
@@ -1981,6 +1987,7 @@ textarea:focus {
     .reader-pane,
     .assistant-pane {
         grid-column: 1;
+        grid-row: auto;
         min-height: 420px;
         border-left: 0;
         border-right: 0;

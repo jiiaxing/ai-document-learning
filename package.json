@@ -10,7 +10,7 @@
     "compile": "tsc -p ./",
     "start": "node out/standalone/server.js",
     "dev": "npm.cmd run compile && node out/standalone/server.js",
-    "test": "npm.cmd run compile && node out/standalone-tests/selectionGate.test.js && node out/standalone-tests/server.test.js && node out/standalone-tests/publicAssets.test.js",
+    "test": "npm.cmd run compile && node out/standalone-tests/selectionGate.test.js && node out/standalone-tests/server.test.js && node out/standalone-tests/publicAssets.test.js && node out/standalone-tests/readerScroll.test.js && node out/standalone-tests/readerLayout.test.js",
     "lint": "eslint src/desktop src/standalone src/standalone-tests",
     "start:web": "node out/standalone/server.js",
     "desktop": "npm.cmd run compile && electron out/desktop/main.js",
